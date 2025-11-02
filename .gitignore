@@ -1,0 +1,75 @@
+# Nix & direnv
+.direnv/
+.envrc
+result
+result-*
+*.drv
+
+# Haskell/Cabal
+dist/
+dist-newstyle/
+*.o
+*.hi
+*.chi
+*.chs.h
+*.dyn_o
+*.dyn_hi
+.hpc
+.HTF/
+.ghc.environment.*
+cabal.project.local
+cabal.project.local~
+*.swp
+*~
+
+# GHC
+.ghc-modules
+
+# Haskell IDEs
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.stack-work/
+stack.yaml.lock
+
+# Stack
+.stack/
+
+# Cabal
+.cabal-sandbox/
+cabal.sandbox.config
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# User data (local development only - never commit)
+data/user-data/
+data/user-data/*
+!data/topik-vocab/
+
+# Common editor/IDE files
+*~
+*.swp
+*.swo
+*#
+.#*
+.vimrc
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+Thumbs.db
+.env
+.env.local
+
+# Build artifacts
+/build/
+/out/
