@@ -1,7 +1,7 @@
 module Output.Algorithm.StreakSpec (spec) where
 
 import Test.Hspec
-import Data.Time (LocalTime, fromGregorian, TimeOfDay(..))
+import Data.Time (LocalTime(..), fromGregorian, TimeOfDay(..))
 import Output.Algorithm.Streak
     ( calculateStreak
     , isConsecutiveDay

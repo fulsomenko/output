@@ -1,7 +1,7 @@
 module Output.Algorithm.SpacedRepetitionSpec (spec) where
 
 import Test.Hspec
-import Data.Time (LocalTime, fromGregorian, timeToTimeOfDay, TimeOfDay(..))
+import Data.Time (LocalTime(..), fromGregorian, TimeOfDay(..))
 import Output.Algorithm.SpacedRepetition
     ( calculateNextReviewDate
     , calculateIntervalDays
