@@ -11,19 +11,23 @@ module Output.Repository.Json
 
 import Data.Aeson (decode, encode, FromJSON, ToJSON)
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy.Char8 as BLC
 import Data.Map (Map, fromList, toList)
-import Data.Time (LocalTime)
+import qualified Data.Map as Map
+import Data.Time (LocalTime, localDay, getCurrentTime, utcToLocalTime, utc)
+import Data.Maybe (mapMaybe, catMaybes)
 import System.Directory (doesFileExist, createDirectoryIfMissing)
+import System.FilePath ((</>))
 import Control.Monad
 
 import Output.Domain.Types
     ( VocabularyId
-    , VocabularyCard
-    , VocabularyState
+    , VocabularyCard(..)
+    , VocabularyState(..)
     , UserProgress
-    , TOPIK_Level
+    , TOPIK_Level(..)
     )
-import Output.Domain.Activity (ActivityEntry)
+import Output.Domain.Activity (ActivityEntry(..))
 import Output.Domain.Progress (emptyUserProgress)
 import Output.Repository.Class
     ( ActivityRepository(..)
@@ -49,22 +53,21 @@ instance ActivityRepository JsonRepository where
             then BL.appendFile filePath line
             else BL.writeFile filePath line
 
-    getActivitiesByDate _ = JsonRepository $ do
-        let filePath = "data/user-data/activities.jsonl"
-        exists <- doesFileExist filePath
-        if not exists
-            then pure []
-            else do
-                content <- BL.readFile filePath
-                pure (parseActivitiesFromJsonl content)
-
-    getActivitiesByVocab _ = JsonRepository $ do
+    getActivitiesByDate targetDate = JsonRepository $ do
         activities <- unJsonRepository getAllActivities
-        pure activities  -- Filter would happen here in real implementation
+        pure $ filter (\a -> localDay (actDate a) == localDay targetDate) activities
 
-    getActivitiesInRange _ _ = JsonRepository $ do
+    getActivitiesByVocab vocabId = JsonRepository $ do
         activities <- unJsonRepository getAllActivities
-        pure activities  -- Filter would happen here
+        pure $ filter (\a -> actVocabularyId a == Just vocabId) activities
+
+    getActivitiesInRange startDate endDate = JsonRepository $ do
+        activities <- unJsonRepository getAllActivities
+        pure $ filter (inRange startDate endDate) activities
+      where
+        inRange start end a =
+            let d = actDate a
+            in d >= start && d <= end
 
     getAllActivities = JsonRepository $ do
         let filePath = "data/user-data/activities.jsonl"
@@ -106,23 +109,48 @@ instance VocabularyRepository JsonRepository where
                         pure (fromList states)
                     Nothing -> pure mempty
 
-    getVocabCardsForLevel _ = JsonRepository $ do
+    getVocabCardsForLevel level = JsonRepository $ do
         cards <- unJsonRepository getAllVocabCards
-        pure cards  -- Filter would happen here
+        pure $ filter (\c -> topicLevel c == level) cards
 
     getAllVocabCards = JsonRepository $ do
         let dir = "data/topik-vocab"
         createDirectoryIfMissing True dir
-        -- This would load from multiple JSON files per TOPIK level
-        pure []  -- Placeholder
+        -- Load from all level files
+        allCards <- forM [One .. Six] $ \level -> do
+            let filePath = dir </> ("level" <> show (fromEnum level + 1) <> ".json")
+            exists <- doesFileExist filePath
+            if not exists
+                then pure []
+                else do
+                    content <- BL.readFile filePath
+                    case decode content of
+                        Just (cards :: [VocabularyCard]) -> pure cards
+                        Nothing -> pure []
+        pure (concat allCards)
 
-    getWordsForReview _ = JsonRepository $ do
+    getWordsForReview now = JsonRepository $ do
         states <- unJsonRepository getAllVocabStates
-        pure (map fst (toList states))  -- Placeholder: would filter by date
+        let dueStates = filter (isDue now) (toList states)
+        pure (map fst dueStates)
+      where
+        isDue currentTime (_, vs) = vstNextReviewDate vs <= currentTime
 
-    saveVocabCard _card = JsonRepository $ do
-        -- Save to appropriate level file
-        pure ()
+    saveVocabCard card = JsonRepository $ do
+        let level = topicLevel card
+        let dir = "data/topik-vocab"
+        let filePath = dir </> ("level" <> show (fromEnum level + 1) <> ".json")
+        createDirectoryIfMissing True dir
+        -- Load existing cards, add/update this one, save back
+        existingCards <- do
+            exists <- doesFileExist filePath
+            if not exists
+                then pure []
+                else do
+                    content <- BL.readFile filePath
+                    pure $ maybe [] id (decode content :: Maybe [VocabularyCard])
+        let updatedCards = card : filter (\c -> vocabId c /= vocabId card) existingCards
+        BL.writeFile filePath (encode updatedCards)
 
 instance UserProgressRepository JsonRepository where
     saveProgress progress = JsonRepository $ do
@@ -132,14 +160,16 @@ instance UserProgressRepository JsonRepository where
     getProgress = JsonRepository $ do
         let filePath = "data/user-data/user-progress.json"
         exists <- doesFileExist filePath
+        now <- utcToLocalTime utc <$> getCurrentTime
         if not exists
-            then error "User progress file not found - initialize with emptyUserProgress"
+            then pure (emptyUserProgress now)
             else do
                 content <- BL.readFile filePath
                 case decode content of
                     Just progress -> pure progress
-                    Nothing -> error "Failed to parse user progress"
+                    Nothing -> pure (emptyUserProgress now)
 
--- Helper function to parse JSONL format
+-- Helper function to parse JSONL format (one JSON object per line)
 parseActivitiesFromJsonl :: BL.ByteString -> [ActivityEntry]
-parseActivitiesFromJsonl _ = []  -- Placeholder implementation
+parseActivitiesFromJsonl content =
+    mapMaybe decode (BLC.lines content)
