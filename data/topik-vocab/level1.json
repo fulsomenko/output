@@ -1,182 +1,351 @@
 [
   {
-    "vocabId": { "unVocabularyId": 1 },
+    "vocabId": 1,
     "korean": "안녕하세요",
     "romanization": "annyeonghaseyo",
-    "english": ["Hello", "Hi"],
+    "english": [
+      "Hello",
+      "Hi"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["안녕하세요, 반갑습니다.", "좋은 아침입니다."],
-    "exampleTranslations": ["Hello, nice to meet you.", "Good morning."]
+    "exampleSentences": [
+      "안녕하세요, 반갑습니다.",
+      "좋은 아침입니다."
+    ],
+    "exampleTranslations": [
+      "Hello, nice to meet you.",
+      "Good morning."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 2 },
+    "vocabId": 2,
     "korean": "감사합니다",
     "romanization": "gamsahamnida",
-    "english": ["Thank you", "Thanks"],
+    "english": [
+      "Thank you",
+      "Thanks"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["도와주셔서 감사합니다.", "식사 맛있게 했습니다."],
-    "exampleTranslations": ["Thank you for your help.", "The food was delicious."]
+    "exampleSentences": [
+      "도와주셔서 감사합니다.",
+      "식사 맛있게 했습니다."
+    ],
+    "exampleTranslations": [
+      "Thank you for your help.",
+      "The food was delicious."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 3 },
+    "vocabId": 3,
     "korean": "물",
     "romanization": "mul",
-    "english": ["Water"],
+    "english": [
+      "Water"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["물 한 잔 주세요.", "나는 매일 물을 마신다."],
-    "exampleTranslations": ["Please give me a glass of water.", "I drink water every day."]
+    "exampleSentences": [
+      "물 한 잔 주세요.",
+      "나는 매일 물을 마신다."
+    ],
+    "exampleTranslations": [
+      "Please give me a glass of water.",
+      "I drink water every day."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 4 },
+    "vocabId": 4,
     "korean": "밥",
     "romanization": "bap",
-    "english": ["Rice", "Meal"],
+    "english": [
+      "Rice",
+      "Meal"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["밥을 먹어요.", "밥 먹었어요?"],
-    "exampleTranslations": ["I eat rice.", "Have you eaten?"]
+    "exampleSentences": [
+      "밥을 먹어요.",
+      "밥 먹었어요?"
+    ],
+    "exampleTranslations": [
+      "I eat rice.",
+      "Have you eaten?"
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 5 },
+    "vocabId": 5,
     "korean": "학교",
     "romanization": "hakgyo",
-    "english": ["School"],
+    "english": [
+      "School"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["학교에 가요.", "나는 학교 학생이에요."],
-    "exampleTranslations": ["I go to school.", "I am a school student."]
+    "exampleSentences": [
+      "학교에 가요.",
+      "나는 학교 학생이에요."
+    ],
+    "exampleTranslations": [
+      "I go to school.",
+      "I am a school student."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 6 },
+    "vocabId": 6,
     "korean": "친구",
     "romanization": "chingu",
-    "english": ["Friend"],
+    "english": [
+      "Friend"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["친구와 함께 놀아요.", "좋은 친구를 사귀었어요."],
-    "exampleTranslations": ["I play with friends.", "I made a good friend."]
+    "exampleSentences": [
+      "친구와 함께 놀아요.",
+      "좋은 친구를 사귀었어요."
+    ],
+    "exampleTranslations": [
+      "I play with friends.",
+      "I made a good friend."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 7 },
+    "vocabId": 7,
     "korean": "가족",
     "romanization": "gajok",
-    "english": ["Family"],
+    "english": [
+      "Family"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["가족과 함께 있어요.", "우리 가족은 행복해요."],
-    "exampleTranslations": ["I am with my family.", "Our family is happy."]
+    "exampleSentences": [
+      "가족과 함께 있어요.",
+      "우리 가족은 행복해요."
+    ],
+    "exampleTranslations": [
+      "I am with my family.",
+      "Our family is happy."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 8 },
+    "vocabId": 8,
     "korean": "날씨",
     "romanization": "nalSSi",
-    "english": ["Weather"],
+    "english": [
+      "Weather"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["오늘 날씨가 좋아요.", "내일 날씨는 어때요?"],
-    "exampleTranslations": ["The weather is good today.", "How is the weather tomorrow?"]
+    "exampleSentences": [
+      "오늘 날씨가 좋아요.",
+      "내일 날씨는 어때요?"
+    ],
+    "exampleTranslations": [
+      "The weather is good today.",
+      "How is the weather tomorrow?"
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 9 },
+    "vocabId": 9,
     "korean": "책",
     "romanization": "chaek",
-    "english": ["Book"],
+    "english": [
+      "Book"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["책을 읽어요.", "재미있는 책을 찾았어요."],
-    "exampleTranslations": ["I read a book.", "I found an interesting book."]
+    "exampleSentences": [
+      "책을 읽어요.",
+      "재미있는 책을 찾았어요."
+    ],
+    "exampleTranslations": [
+      "I read a book.",
+      "I found an interesting book."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 10 },
+    "vocabId": 10,
     "korean": "나",
     "romanization": "na",
-    "english": ["I", "Me"],
+    "english": [
+      "I",
+      "Me"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["나는 학생이에요.", "나를 도와주세요."],
-    "exampleTranslations": ["I am a student.", "Help me please."]
+    "exampleSentences": [
+      "나는 학생이에요.",
+      "나를 도와주세요."
+    ],
+    "exampleTranslations": [
+      "I am a student.",
+      "Help me please."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 11 },
+    "vocabId": 11,
     "korean": "너",
     "romanization": "neo",
-    "english": ["You"],
+    "english": [
+      "You"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["너는 누구야?", "너를 좋아해."],
-    "exampleTranslations": ["Who are you?", "I like you."]
+    "exampleSentences": [
+      "너는 누구야?",
+      "너를 좋아해."
+    ],
+    "exampleTranslations": [
+      "Who are you?",
+      "I like you."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 12 },
+    "vocabId": 12,
     "korean": "좋다",
     "romanization": "jota",
-    "english": ["Good", "Like"],
+    "english": [
+      "Good",
+      "Like"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["날씨가 좋아요.", "너를 좋아해."],
-    "exampleTranslations": ["The weather is good.", "I like you."]
+    "exampleSentences": [
+      "날씨가 좋아요.",
+      "너를 좋아해."
+    ],
+    "exampleTranslations": [
+      "The weather is good.",
+      "I like you."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 13 },
+    "vocabId": 13,
     "korean": "나쁘다",
     "romanization": "nappeuda",
-    "english": ["Bad", "Poor"],
+    "english": [
+      "Bad",
+      "Poor"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["날씨가 나빠요.", "기분이 나빠요."],
-    "exampleTranslations": ["The weather is bad.", "I feel bad."]
+    "exampleSentences": [
+      "날씨가 나빠요.",
+      "기분이 나빠요."
+    ],
+    "exampleTranslations": [
+      "The weather is bad.",
+      "I feel bad."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 14 },
+    "vocabId": 14,
     "korean": "크다",
     "romanization": "keuda",
-    "english": ["Big", "Large"],
+    "english": [
+      "Big",
+      "Large"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["이 집은 커요.", "크기가 크다."],
-    "exampleTranslations": ["This house is big.", "The size is large."]
+    "exampleSentences": [
+      "이 집은 커요.",
+      "크기가 크다."
+    ],
+    "exampleTranslations": [
+      "This house is big.",
+      "The size is large."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 15 },
+    "vocabId": 15,
     "korean": "작다",
     "romanization": "jakda",
-    "english": ["Small"],
+    "english": [
+      "Small"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["이 상자는 작아요.", "작은 새를 봤어요."],
-    "exampleTranslations": ["This box is small.", "I saw a small bird."]
+    "exampleSentences": [
+      "이 상자는 작아요.",
+      "작은 새를 봤어요."
+    ],
+    "exampleTranslations": [
+      "This box is small.",
+      "I saw a small bird."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 16 },
+    "vocabId": 16,
     "korean": "먹다",
     "romanization": "meokda",
-    "english": ["Eat"],
+    "english": [
+      "Eat"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["밥을 먹어요.", "친구와 함께 먹었어요."],
-    "exampleTranslations": ["I eat rice.", "I ate with my friend."]
+    "exampleSentences": [
+      "밥을 먹어요.",
+      "친구와 함께 먹었어요."
+    ],
+    "exampleTranslations": [
+      "I eat rice.",
+      "I ate with my friend."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 17 },
+    "vocabId": 17,
     "korean": "마시다",
     "romanization": "masida",
-    "english": ["Drink"],
+    "english": [
+      "Drink"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["물을 마셔요.", "커피를 마시고 싶어요."],
-    "exampleTranslations": ["I drink water.", "I want to drink coffee."]
+    "exampleSentences": [
+      "물을 마셔요.",
+      "커피를 마시고 싶어요."
+    ],
+    "exampleTranslations": [
+      "I drink water.",
+      "I want to drink coffee."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 18 },
+    "vocabId": 18,
     "korean": "가다",
     "romanization": "gada",
-    "english": ["Go"],
+    "english": [
+      "Go"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["학교에 가요.", "어디에 가세요?"],
-    "exampleTranslations": ["I go to school.", "Where are you going?"]
+    "exampleSentences": [
+      "학교에 가요.",
+      "어디에 가세요?"
+    ],
+    "exampleTranslations": [
+      "I go to school.",
+      "Where are you going?"
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 19 },
+    "vocabId": 19,
     "korean": "오다",
     "romanization": "oda",
-    "english": ["Come"],
+    "english": [
+      "Come"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["친구가 왔어요.", "내일 올 거예요."],
-    "exampleTranslations": ["My friend came.", "I will come tomorrow."]
+    "exampleSentences": [
+      "친구가 왔어요.",
+      "내일 올 거예요."
+    ],
+    "exampleTranslations": [
+      "My friend came.",
+      "I will come tomorrow."
+    ]
   },
   {
-    "vocabId": { "unVocabularyId": 20 },
+    "vocabId": 20,
     "korean": "있다",
     "romanization": "itda",
-    "english": ["There is", "Have", "Exist"],
+    "english": [
+      "There is",
+      "Have",
+      "Exist"
+    ],
     "topicLevel": "One",
-    "exampleSentences": ["책이 있어요.", "시간이 있나요?"],
-    "exampleTranslations": ["There is a book.", "Do you have time?"]
+    "exampleSentences": [
+      "책이 있어요.",
+      "시간이 있나요?"
+    ],
+    "exampleTranslations": [
+      "There is a book.",
+      "Do you have time?"
+    ]
   }
 ]
