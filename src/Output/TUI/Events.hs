@@ -5,14 +5,23 @@ module Output.TUI.Events
     ) where
 
 import Control.Monad (when)
+import Control.Monad.IO.Class (liftIO)
 import Brick
 import qualified Graphics.Vty as V
 import qualified Data.Text as T
-import Data.Text (Text)
+import Data.Time (getCurrentTime)
 
 import Output.TUI.Types
 import Output.Domain.Exercise (ExercisePrompt(..), checkAnswer, generateExercisePrompt)
 import Output.Domain.Types (ExerciseType(..))
+import Output.Domain.Jamo (qwertyToJamo)
+import Output.Domain.TypingLevel (allLevels, getLevel, TypingLevel(..), mainLevels, getSubLevels, hasSubLevels)
+import Output.Domain.TypingWord (TypingWord(..))
+import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), createSessionPrompts, validateTyping, CharStatus(..), isWordComplete)
+import Output.Domain.Types (TypingProgress(..), emptyTypingProgress)
+import Output.Repository.Json (runJsonRepository)
+import Output.Repository.Class (markLevelCompleted)
+import qualified Data.Set as Set
 
 -- | Main event handler
 handleEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
@@ -21,6 +30,8 @@ handleEvent ev = do
     case asScreen s of
         MainMenuScreen -> handleMenuEvent ev
         DrillScreen -> handleDrillEvent ev
+        TypingPracticeScreen -> handleTypingEvent ev
+        TypingLevelSelectScreen -> handleLevelSelectEvent ev
         ProgressScreen -> handleProgressEvent ev
         HelpScreen -> handleHelpEvent ev
         QuitConfirmScreen -> handleQuitEvent ev
@@ -36,18 +47,19 @@ handleMenuEvent (VtyEvent (V.EvKey V.KUp [])) =
 handleMenuEvent (VtyEvent (V.EvKey (V.KChar 'k') [])) =
     modify $ \s -> s { asMenuIndex = max 0 (asMenuIndex s - 1) }
 handleMenuEvent (VtyEvent (V.EvKey V.KDown [])) =
-    modify $ \s -> s { asMenuIndex = min 5 (asMenuIndex s + 1) }
+    modify $ \s -> s { asMenuIndex = min 6 (asMenuIndex s + 1) }
 handleMenuEvent (VtyEvent (V.EvKey (V.KChar 'j') [])) =
-    modify $ \s -> s { asMenuIndex = min 5 (asMenuIndex s + 1) }
+    modify $ \s -> s { asMenuIndex = min 6 (asMenuIndex s + 1) }
 handleMenuEvent (VtyEvent (V.EvKey V.KEnter [])) = do
     s <- get
     case asMenuIndex s of
         0 -> startDrill WritingMode  -- Writing drill
         1 -> startDrill ReadingMode  -- Reading drill
         2 -> startDrill TypingMode   -- Typing drill
-        3 -> modify $ \st -> st { asScreen = ProgressScreen }
-        4 -> modify $ \st -> st { asScreen = HelpScreen }
-        5 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
+        3 -> startTypingPractice     -- Typing practice with levels
+        4 -> modify $ \st -> st { asScreen = ProgressScreen }
+        5 -> modify $ \st -> st { asScreen = HelpScreen }
+        6 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
         _ -> pure ()
 handleMenuEvent (VtyEvent (V.EvKey (V.KChar '?') [])) =
     modify $ \s -> s { asScreen = HelpScreen }
@@ -229,3 +241,330 @@ handleQuitEvent (VtyEvent (V.EvKey (V.KChar 'N') [])) =
 handleQuitEvent (VtyEvent (V.EvKey V.KEsc [])) =
     modify $ \s -> s { asScreen = MainMenuScreen }
 handleQuitEvent _ = pure ()
+
+-- | Start typing practice - go to level selector
+startTypingPractice :: EventM Name AppState ()
+startTypingPractice = do
+    s <- get
+    let words = asTypingWords s
+    if null words
+        then modify $ \st -> st { asMessage = Just "No typing vocabulary loaded!" }
+        else do
+            -- Create initial typing state for level selection
+            case headMay mainLevels of
+                Nothing -> modify $ \st -> st { asMessage = Just "Error loading levels" }
+                Just level -> do
+                    let ts = initialTypingState level Echo [] words
+                    modify $ \st -> st
+                        { asScreen = TypingLevelSelectScreen
+                        , asTyping = Just ts
+                            { typSelectedLevel = tlNumber level
+                            , typLevelSelectMode = TopLevelSelect
+                            , typSelectedIndex = 0
+                            }
+                        , asMessage = Nothing
+                        }
+
+-- | Handle level selection events
+handleLevelSelectEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+handleLevelSelectEvent (VtyEvent (V.EvKey V.KEsc [])) = handleLevelSelectEsc
+handleLevelSelectEvent (VtyEvent (V.EvKey V.KUp [])) = navigateLevelUp
+handleLevelSelectEvent (VtyEvent (V.EvKey (V.KChar 'k') [])) = navigateLevelUp
+handleLevelSelectEvent (VtyEvent (V.EvKey V.KDown [])) = navigateLevelDown
+handleLevelSelectEvent (VtyEvent (V.EvKey (V.KChar 'j') [])) = navigateLevelDown
+handleLevelSelectEvent (VtyEvent (V.EvKey V.KEnter [])) = handleLevelSelectEnter
+handleLevelSelectEvent _ = pure ()
+
+-- | Handle Esc in level selector (back or exit)
+handleLevelSelectEsc :: EventM Name AppState ()
+handleLevelSelectEsc = do
+    s <- get
+    case asTyping s of
+        Nothing -> modify $ \st -> st { asScreen = MainMenuScreen }
+        Just ts -> case typLevelSelectMode ts of
+            TopLevelSelect ->
+                -- At top level, exit to main menu
+                modify $ \st -> st { asScreen = MainMenuScreen, asTyping = Nothing }
+            SubLevelSelect _ ->
+                -- In sub-level, go back to top level
+                modify $ \st -> st
+                    { asTyping = Just ts
+                        { typLevelSelectMode = TopLevelSelect
+                        , typSelectedIndex = 0  -- Reset to first main level
+                        }
+                    }
+
+-- | Navigate up in current level list
+navigateLevelUp :: EventM Name AppState ()
+navigateLevelUp = do
+    s <- get
+    case asTyping s of
+        Nothing -> pure ()
+        Just ts -> do
+            let currentIdx = typSelectedIndex ts
+            when (currentIdx > 0) $
+                modify $ \st -> st { asTyping = Just ts { typSelectedIndex = currentIdx - 1 } }
+
+-- | Navigate down in current level list
+navigateLevelDown :: EventM Name AppState ()
+navigateLevelDown = do
+    s <- get
+    case asTyping s of
+        Nothing -> pure ()
+        Just ts -> do
+            let currentIdx = typSelectedIndex ts
+                maxIdx = case typLevelSelectMode ts of
+                    TopLevelSelect -> length mainLevels - 1
+                    SubLevelSelect parentLevel -> length (getSubLevels parentLevel) - 1
+            when (currentIdx < maxIdx) $
+                modify $ \st -> st { asTyping = Just ts { typSelectedIndex = currentIdx + 1 } }
+
+-- | Handle Enter in level selector (drill-in or start)
+handleLevelSelectEnter :: EventM Name AppState ()
+handleLevelSelectEnter = do
+    s <- get
+    case asTyping s of
+        Nothing -> pure ()
+        Just ts -> case typLevelSelectMode ts of
+            TopLevelSelect -> do
+                -- Get the selected main level
+                let idx = typSelectedIndex ts
+                case safeIndex mainLevels idx of
+                    Nothing -> pure ()
+                    Just level -> do
+                        let levelNum = tlNumber level
+                        if hasSubLevels levelNum
+                            then
+                                -- Drill into sub-levels
+                                modify $ \st -> st
+                                    { asTyping = Just ts
+                                        { typLevelSelectMode = SubLevelSelect levelNum
+                                        , typSelectedIndex = 0
+                                        }
+                                    }
+                            else
+                                -- Start the level directly
+                                startLevelSession level ts
+            SubLevelSelect parentLevel -> do
+                -- Get the selected sub-level
+                let subs = getSubLevels parentLevel
+                    idx = typSelectedIndex ts
+                case safeIndex subs idx of
+                    Nothing -> pure ()
+                    Just level -> startLevelSession level ts
+
+-- | Safe index into list
+safeIndex :: [a] -> Int -> Maybe a
+safeIndex [] _ = Nothing
+safeIndex (x:_) 0 = Just x
+safeIndex (_:xs) n = if n < 0 then Nothing else safeIndex xs (n - 1)
+
+-- | Safe head
+headMay :: [a] -> Maybe a
+headMay [] = Nothing
+headMay (x:_) = Just x
+
+-- | Start a typing practice session at the given level
+startLevelSession :: TypingLevel -> TypingState -> EventM Name AppState ()
+startLevelSession level ts = do
+    let levelNum = tlNumber level
+        -- Filter words for this exact level
+        levelWords = filter (\w -> twLevel w == levelNum) (typWords ts)
+    if null levelWords
+        then modify $ \st -> st { asMessage = Just $ "No words for level " <> tlName level }
+        else do
+            let prompts = createSessionPrompts Echo (take 20 levelWords)
+                newTs = ts
+                    { typLevel = level
+                    , typPrompts = prompts
+                    , typCurrentIndex = 0
+                    , typTypedJamo = []
+                    , typCharStatuses = []
+                    , typStartTime = Nothing
+                    , typStats = emptyTypingStats
+                    }
+            modify $ \st -> st
+                { asScreen = TypingPracticeScreen
+                , asTyping = Just newTs
+                }
+
+-- | Handle typing practice events
+handleTypingEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+handleTypingEvent (VtyEvent (V.EvKey V.KEsc [])) = endTypingPractice
+handleTypingEvent (VtyEvent (V.EvKey (V.KChar '?') [])) = toggleHints
+handleTypingEvent (VtyEvent (V.EvKey (V.KChar '\t') [])) = skipTypingWord
+handleTypingEvent (VtyEvent (V.EvKey V.KBS [])) = handleTypingBackspace
+handleTypingEvent (VtyEvent (V.EvKey (V.KChar c) [])) = handleTypingKeypress c
+handleTypingEvent _ = pure ()
+
+-- | Handle a keypress in typing mode
+handleTypingKeypress :: Char -> EventM Name AppState ()
+handleTypingKeypress c = do
+    s <- get
+    case asTyping s of
+        Nothing -> pure ()
+        Just ts -> case qwertyToJamo c of
+            Nothing -> pure ()  -- Not a Korean key
+            Just jamo -> do
+                let currentPrompt = getCurrentTypingPrompt ts
+                case currentPrompt of
+                    Nothing -> advanceTypingWord  -- No more prompts
+                    Just prompt -> do
+                        let expected = tpExpectedJamo prompt
+                        let typed = typTypedJamo ts
+                        let newTyped = typed ++ [jamo]
+                        let statuses = validateTyping expected newTyped
+                        let isCorrect = length newTyped <= length expected &&
+                                       statuses !! (length newTyped - 1) == Correct
+
+                        -- Update stats
+                        let stats = typStats ts
+                        let newStats = if isCorrect
+                                then stats { tsStreak = tsStreak stats + 1 }
+                                else stats { tsStreak = 0 }
+
+                        let newTs = ts
+                                { typTypedJamo = newTyped
+                                , typCharStatuses = statuses
+                                , typLastKeyCorrect = Just isCorrect
+                                , typStats = newStats
+                                }
+
+                        modify $ \st -> st { asTyping = Just newTs }
+
+                        -- Check if word is complete
+                        when (length newTyped >= length expected) $ do
+                            let allCorrect = all (== Correct) statuses
+                            updateTypingStatsAndAdvance allCorrect
+
+-- | Handle backspace in typing mode
+handleTypingBackspace :: EventM Name AppState ()
+handleTypingBackspace = do
+    s <- get
+    case asTyping s of
+        Nothing -> pure ()
+        Just ts -> do
+            let typed = typTypedJamo ts
+            when (not $ null typed) $ do
+                let newTyped = init typed
+                let currentPrompt = getCurrentTypingPrompt ts
+                let statuses = case currentPrompt of
+                        Just prompt -> validateTyping (tpExpectedJamo prompt) newTyped
+                        Nothing -> []
+                modify $ \st -> st
+                    { asTyping = Just ts
+                        { typTypedJamo = newTyped
+                        , typCharStatuses = statuses
+                        , typLastKeyCorrect = Nothing
+                        }
+                    }
+
+-- | Get current typing prompt
+getCurrentTypingPrompt :: TypingState -> Maybe TypingPrompt
+getCurrentTypingPrompt ts
+    | typCurrentIndex ts < length (typPrompts ts) =
+        Just (typPrompts ts !! typCurrentIndex ts)
+    | otherwise = Nothing
+
+-- | Update stats and advance to next word
+updateTypingStatsAndAdvance :: Bool -> EventM Name AppState ()
+updateTypingStatsAndAdvance wasCorrect = do
+    s <- get
+    case asTyping s of
+        Nothing -> pure ()
+        Just ts -> do
+            let stats = typStats ts
+            let newStats = stats
+                    { tsWordsCompleted = tsWordsCompleted stats + 1
+                    , tsCorrectWords = if wasCorrect
+                        then tsCorrectWords stats + 1
+                        else tsCorrectWords stats
+                    , tsAccuracy = let total = tsWordsCompleted stats + 1
+                                       correct = if wasCorrect
+                                           then tsCorrectWords stats + 1
+                                           else tsCorrectWords stats
+                                   in (fromIntegral correct / fromIntegral total) * 100
+                    }
+            modify $ \st -> st { asTyping = Just ts { typStats = newStats } }
+            advanceTypingWord
+
+-- | Skip current word
+skipTypingWord :: EventM Name AppState ()
+skipTypingWord = updateTypingStatsAndAdvance False
+
+-- | Advance to next typing word
+advanceTypingWord :: EventM Name AppState ()
+advanceTypingWord = do
+    s <- get
+    case asTyping s of
+        Nothing -> pure ()
+        Just ts -> do
+            let newIdx = typCurrentIndex ts + 1
+            if newIdx >= length (typPrompts ts)
+                then endTypingPractice
+                else modify $ \st -> st
+                    { asTyping = Just ts
+                        { typCurrentIndex = newIdx
+                        , typTypedJamo = []
+                        , typCharStatuses = []
+                        , typStartTime = Nothing
+                        , typLastKeyCorrect = Nothing
+                        }
+                    }
+
+-- | Toggle hints display
+toggleHints :: EventM Name AppState ()
+toggleHints = do
+    s <- get
+    case asTyping s of
+        Nothing -> pure ()
+        Just ts -> modify $ \st -> st
+            { asTyping = Just ts { typShowHints = not (typShowHints ts) }
+            }
+
+-- | End typing practice and return to level selector
+endTypingPractice :: EventM Name AppState ()
+endTypingPractice = do
+    s <- get
+    case asTyping s of
+        Nothing -> modify $ \st -> st { asScreen = MainMenuScreen }
+        Just ts -> do
+            let stats = typStats ts
+                levelNum = tlNumber (typLevel ts)
+                accuracy = tsAccuracy stats
+                completedEnough = tsWordsCompleted stats >= 5  -- Minimum words to count
+                accuracyPassed = accuracy >= 80.0
+                shouldMarkComplete = completedEnough && accuracyPassed
+
+            -- Mark level as completed if criteria met
+            when shouldMarkComplete $ do
+                liftIO $ runJsonRepository $ markLevelCompleted levelNum
+                -- Update local progress
+                let oldProgress = asTypingProgress s
+                    newProgress = oldProgress
+                        { tpCompletedLevels = Set.insert levelNum (tpCompletedLevels oldProgress)
+                        }
+                modify $ \st -> st { asTypingProgress = newProgress }
+
+            let completionNote = if shouldMarkComplete then " ★ Level complete!" else ""
+                msg = "Session complete! "
+                    <> T.pack (show $ tsCorrectWords stats)
+                    <> "/"
+                    <> T.pack (show $ tsWordsCompleted stats)
+                    <> " words | Accuracy: "
+                    <> T.pack (show (round accuracy :: Int))
+                    <> "%"
+                    <> completionNote
+
+            -- Return to level selector (not main menu)
+            modify $ \st -> st
+                { asScreen = TypingLevelSelectScreen
+                , asTyping = Just ts
+                    { typPrompts = []
+                    , typCurrentIndex = 0
+                    , typTypedJamo = []
+                    , typCharStatuses = []
+                    }
+                , asMessage = Just msg
+                }
+
