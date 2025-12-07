@@ -25,6 +25,8 @@ import Output.Domain.Types
     , VocabularyCard(..)
     , VocabularyState(..)
     , UserProgress
+    , TypingProgress(..)
+    , emptyTypingProgress
     , TOPIK_Level(..)
     )
 import Output.Domain.Activity (ActivityEntry(..))
@@ -33,7 +35,9 @@ import Output.Repository.Class
     ( ActivityRepository(..)
     , VocabularyRepository(..)
     , UserProgressRepository(..)
+    , TypingProgressRepository(..)
     )
+import qualified Data.Set as Set
 
 -- | JSON-based repository implementation
 newtype JsonRepository a = JsonRepository { unJsonRepository :: IO a }
@@ -173,3 +177,24 @@ instance UserProgressRepository JsonRepository where
 parseActivitiesFromJsonl :: BL.ByteString -> [ActivityEntry]
 parseActivitiesFromJsonl content =
     mapMaybe decode (BLC.lines content)
+
+instance TypingProgressRepository JsonRepository where
+    getTypingProgress = JsonRepository $ do
+        let filePath = "data/user-data/typing-progress.json"
+        exists <- doesFileExist filePath
+        if not exists
+            then pure emptyTypingProgress
+            else do
+                content <- BL.readFile filePath
+                case decode content of
+                    Just progress -> pure progress
+                    Nothing -> pure emptyTypingProgress
+
+    saveTypingProgress progress = JsonRepository $ do
+        createDirectoryIfMissing True "data/user-data"
+        BL.writeFile "data/user-data/typing-progress.json" (encode progress)
+
+    markLevelCompleted levelNum = JsonRepository $ do
+        progress <- unJsonRepository getTypingProgress
+        let newProgress = progress { tpCompletedLevels = Set.insert levelNum (tpCompletedLevels progress) }
+        unJsonRepository $ saveTypingProgress newProgress
