@@ -24,6 +24,10 @@ library
         Output.Domain.Progress
         Output.Domain.Exercise
         Output.Domain.Session
+        Output.Domain.Jamo
+        Output.Domain.TypingLevel
+        Output.Domain.TypingWord
+        Output.Domain.TypingExercise
         Output.Repository.Class
         Output.Repository.Json
         Output.Repository.Memory
@@ -36,6 +40,8 @@ library
         Output.TUI.App
         Output.TUI.Draw
         Output.TUI.Events
+        Output.TUI.Widgets.Keyboard
+        Output.TUI.Widgets.TypingPractice
     build-depends:
         base >=4.16 && <5,
         aeson >=2.0,
