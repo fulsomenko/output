@@ -4,6 +4,7 @@ module Output.Repository.Class
     ( ActivityRepository(..)
     , VocabularyRepository(..)
     , UserProgressRepository(..)
+    , TypingProgressRepository(..)
     ) where
 
 import Data.Time (LocalTime)
@@ -13,6 +14,7 @@ import Output.Domain.Types
     , VocabularyCard
     , VocabularyState
     , UserProgress
+    , TypingProgress
     , TOPIK_Level
     )
 import Output.Domain.Activity (ActivityEntry)
@@ -64,3 +66,14 @@ class Monad m => UserProgressRepository m where
 
     -- | Get current user progress
     getProgress :: m UserProgress
+
+-- | Repository for typing practice progress
+class Monad m => TypingProgressRepository m where
+    -- | Get current typing progress
+    getTypingProgress :: m TypingProgress
+
+    -- | Save typing progress
+    saveTypingProgress :: TypingProgress -> m ()
+
+    -- | Mark a level as completed
+    markLevelCompleted :: Int -> m ()
