@@ -10,6 +10,12 @@ module Output.TUI.Types
     , DrillState(..)
     , DrillMode(..)
     , initialDrillState
+      -- * Typing State
+    , TypingState(..)
+    , TypingStats(..)
+    , LevelSelectMode(..)
+    , initialTypingState
+    , emptyTypingStats
       -- * Application State
     , AppState(..)
     , AppEvent(..)
@@ -24,15 +30,27 @@ module Output.TUI.Types
     , incorrectAttr
     , hintAttr
     , statsAttr
+    , keyboardAttr
+    , keyHighlightAttr
+    , keyDisabledAttr
     ) where
 
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
+import Data.Time (UTCTime)
 import Brick (AttrName, attrName)
 import GHC.Generics (Generic)
 
 import Output.Domain.Types
 import Output.Domain.Exercise (ExercisePrompt)
+import Output.Domain.Jamo (Jamo)
+import Output.Domain.TypingLevel (TypingLevel)
+import Output.Domain.TypingWord (TypingWord)
+import Output.Domain.TypingExercise (TypingExerciseType, TypingPrompt, CharStatus)
 
 -- | Widget names for focus management
 data Name
@@ -40,12 +58,17 @@ data Name
     | ExerciseInput
     | ProgressView
     | HelpView
+    | TypingInput
+    | KeyboardView
+    | LevelSelector
     deriving (Show, Eq, Ord)
 
 -- | Application screens
 data Screen
     = MainMenuScreen
     | DrillScreen
+    | TypingPracticeScreen
+    | TypingLevelSelectScreen
     | ProgressScreen
     | HelpScreen
     | QuitConfirmScreen
@@ -83,6 +106,70 @@ initialDrillState mode exercises = DrillState
     , dsRevealAnswer = False
     }
 
+-- | Statistics for typing practice
+data TypingStats = TypingStats
+    { tsWPM :: Double              -- Words per minute
+    , tsAccuracy :: Double         -- Accuracy percentage
+    , tsStreak :: Int              -- Current correct streak
+    , tsErrorMap :: Map Jamo Int   -- Error count per jamo
+    , tsWordsCompleted :: Int      -- Total words completed
+    , tsCorrectWords :: Int        -- Words typed correctly
+    } deriving (Show, Eq, Generic)
+
+-- | Empty typing stats
+emptyTypingStats :: TypingStats
+emptyTypingStats = TypingStats
+    { tsWPM = 0
+    , tsAccuracy = 100
+    , tsStreak = 0
+    , tsErrorMap = Map.empty
+    , tsWordsCompleted = 0
+    , tsCorrectWords = 0
+    }
+
+-- | Mode for level selection UI
+data LevelSelectMode
+    = TopLevelSelect      -- Viewing main levels (Level 1, 2, 3...)
+    | SubLevelSelect Int  -- Viewing sub-levels of a parent level
+    deriving (Show, Eq, Generic)
+
+-- | State for typing practice mode
+data TypingState = TypingState
+    { typLevel :: TypingLevel               -- Current level
+    , typExerciseType :: TypingExerciseType -- Type of exercise
+    , typPrompts :: [TypingPrompt]          -- All prompts for session
+    , typCurrentIndex :: Int                -- Current prompt index
+    , typTypedJamo :: [Jamo]                -- Current input as jamo
+    , typCharStatuses :: [CharStatus]       -- Per-character feedback
+    , typStartTime :: Maybe UTCTime         -- When current word started
+    , typStats :: TypingStats               -- Session statistics
+    , typShowHints :: Bool                  -- Whether to show hints
+    , typLastKeyCorrect :: Maybe Bool       -- Result of last keypress
+    , typWords :: [TypingWord]              -- Available words for this level
+    , typSelectedLevel :: Int               -- Level selection (for level select screen)
+    , typLevelSelectMode :: LevelSelectMode -- Top-level or sub-level view
+    , typSelectedIndex :: Int               -- Index in current level list
+    } deriving (Show, Eq, Generic)
+
+-- | Create initial typing state
+initialTypingState :: TypingLevel -> TypingExerciseType -> [TypingPrompt] -> [TypingWord] -> TypingState
+initialTypingState level exType prompts words = TypingState
+    { typLevel = level
+    , typExerciseType = exType
+    , typPrompts = prompts
+    , typCurrentIndex = 0
+    , typTypedJamo = []
+    , typCharStatuses = []
+    , typStartTime = Nothing
+    , typStats = emptyTypingStats
+    , typShowHints = True
+    , typLastKeyCorrect = Nothing
+    , typWords = words
+    , typSelectedLevel = 1
+    , typLevelSelectMode = TopLevelSelect
+    , typSelectedIndex = 0
+    }
+
 -- | Custom events for the application
 data AppEvent
     = Tick  -- For timers if needed
@@ -92,10 +179,13 @@ data AppEvent
 data AppState = AppState
     { asScreen :: Screen
     , asDrill :: Maybe DrillState
+    , asTyping :: Maybe TypingState       -- Typing practice state
     , asMenuIndex :: Int                  -- Selected menu item
     , asVocabCards :: [VocabularyCard]    -- Loaded vocabulary
     , asProgress :: Maybe UserProgress    -- User's progress
     , asMessage :: Maybe Text             -- Status message
+    , asTypingWords :: [TypingWord]       -- Typing vocabulary words
+    , asTypingProgress :: TypingProgress  -- Typing level completion status
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -103,10 +193,13 @@ initialAppState :: AppState
 initialAppState = AppState
     { asScreen = MainMenuScreen
     , asDrill = Nothing
+    , asTyping = Nothing
     , asMenuIndex = 0
     , asVocabCards = []
     , asProgress = Nothing
     , asMessage = Nothing
+    , asTypingWords = []
+    , asTypingProgress = emptyTypingProgress
     }
 
 -- | Attribute names for styling
@@ -136,3 +229,12 @@ hintAttr = attrName "hint"
 
 statsAttr :: AttrName
 statsAttr = attrName "stats"
+
+keyboardAttr :: AttrName
+keyboardAttr = attrName "keyboard"
+
+keyHighlightAttr :: AttrName
+keyHighlightAttr = attrName "keyHighlight"
+
+keyDisabledAttr :: AttrName
+keyDisabledAttr = attrName "keyDisabled"
