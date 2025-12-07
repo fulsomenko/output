@@ -13,7 +13,8 @@ import Data.Text (Text)
 
 import Output.TUI.Types
 import Output.Domain.Exercise (ExercisePrompt(..))
-import Output.Domain.Types (UserProgress(..))
+import Output.Domain.Types (UserProgress(..), TypingProgress)
+import Output.TUI.Widgets.TypingPractice
 
 -- | Main draw function
 drawUI :: AppState -> [Widget Name]
@@ -23,6 +24,12 @@ drawUI s = [ui]
         MainMenuScreen -> drawMainMenu s
         DrillScreen -> case asDrill s of
             Just drill -> drawDrill drill
+            Nothing -> drawMainMenu s
+        TypingPracticeScreen -> case asTyping s of
+            Just ts -> drawTypingPracticeScreen ts
+            Nothing -> drawMainMenu s
+        TypingLevelSelectScreen -> case asTyping s of
+            Just ts -> drawLevelSelectScreen ts (asTypingProgress s)
             Nothing -> drawMainMenu s
         ProgressScreen -> drawProgress s
         HelpScreen -> drawHelp
@@ -52,6 +59,7 @@ drawMenuItems s = vBox $ zipWith (drawMenuItem (asMenuIndex s)) [0..] menuOption
         [ ("Start Writing Drill", "Translate English to Korean")
         , ("Start Reading Drill", "Read Korean and self-grade")
         , ("Start Typing Drill", "Type Korean with instant feedback")
+        , ("Typing Practice", "Learn Korean keyboard with levels")
         , ("View Progress", "See your learning statistics")
         , ("Help", "View keyboard shortcuts")
         , ("Quit", "Exit the application")
@@ -229,4 +237,28 @@ drawQuitConfirm =
         , padTop (Pad 1) $ hBox
             [ txt "[y] Yes  [n] No"
             ]
+        ]
+
+-- | Draw typing practice screen with frame
+drawTypingPracticeScreen :: TypingState -> Widget Name
+drawTypingPracticeScreen ts =
+    withBorderStyle unicodeBold $
+    borderWithLabel (withAttr titleAttr $ txt " Korean Typing Practice ") $
+    padAll 1 $ vBox
+        [ drawTypingPractice ts
+        , hBorder
+        , padTop (Pad 1) $ hCenter $ hBox
+            [ txt "[Esc] Exit | [?] Toggle Hints | [Tab] Skip Word"
+            ]
+        ]
+
+-- | Draw level selector screen with frame
+drawLevelSelectScreen :: TypingState -> TypingProgress -> Widget Name
+drawLevelSelectScreen ts progress =
+    withBorderStyle unicodeBold $
+    borderWithLabel (withAttr titleAttr $ txt " Select Typing Level ") $
+    padAll 2 $ vBox
+        [ center $ drawLevelSelector ts progress
+        , hBorder
+        , padTop (Pad 1) $ hCenter $ txt "[↑/↓] Navigate | [Enter] Select | [Esc] Back"
         ]
