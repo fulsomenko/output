@@ -15,7 +15,8 @@ import Output.TUI.Types
 import Output.TUI.Draw (drawUI)
 import Output.TUI.Events (handleEvent)
 import Output.Repository.Json (runJsonRepository)
-import Output.Repository.Class (getAllVocabCards, getProgress)
+import Output.Repository.Class (getAllVocabCards, getProgress, getTypingProgress)
+import Output.Domain.TypingWord (loadAllTypingWords)
 
 -- | Brick application definition
 app :: App AppState AppEvent Name
@@ -48,9 +49,15 @@ runTUI = do
     cards <- runJsonRepository getAllVocabCards
     progress <- runJsonRepository getProgress
 
+    -- Load typing vocabulary and progress
+    typingWords <- loadAllTypingWords "data"
+    typingProgress <- runJsonRepository getTypingProgress
+
     let initialState = initialAppState
             { asVocabCards = cards
             , asProgress = Just progress
+            , asTypingWords = typingWords
+            , asTypingProgress = typingProgress
             }
 
     -- Build vty and run
