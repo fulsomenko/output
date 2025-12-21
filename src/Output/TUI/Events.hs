@@ -9,18 +9,28 @@ import Control.Monad.IO.Class (liftIO)
 import Brick
 import qualified Graphics.Vty as V
 import qualified Data.Text as T
-import Data.Time (getCurrentTime)
+import Data.Time (getCurrentTime, utcToLocalTime, utc)
+import qualified Data.Map as Map
 
 import Output.TUI.Types
 import Output.Domain.Exercise (ExercisePrompt(..), checkAnswer, generateExercisePrompt)
-import Output.Domain.Types (ExerciseType(..))
+import Output.Domain.Types
+    ( ExerciseType(..)
+    , TypingProgress(..)
+    , VocabularyId
+    , VocabularyCard(..)
+    , VocabularyState(..)
+    , newVocabularyState
+    )
 import Output.Domain.Jamo (qwertyToJamo)
-import Output.Domain.TypingLevel (allLevels, getLevel, TypingLevel(..), mainLevels, getSubLevels, hasSubLevels)
+import Output.Domain.TypingLevel (TypingLevel(..), mainLevels, getSubLevels, hasSubLevels)
 import Output.Domain.TypingWord (TypingWord(..))
-import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), createSessionPrompts, validateTyping, CharStatus(..), isWordComplete)
-import Output.Domain.Types (TypingProgress(..), emptyTypingProgress)
+import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), createSessionPrompts, validateTyping, CharStatus(..))
+import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
 import Output.Repository.Json (runJsonRepository)
-import Output.Repository.Class (markLevelCompleted)
+import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity)
+import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..))
+import Output.Algorithm.SpacedRepetition (defaultSM2, applySRSResult)
 import qualified Data.Set as Set
 
 -- | Main event handler
@@ -53,10 +63,10 @@ handleMenuEvent (VtyEvent (V.EvKey (V.KChar 'j') [])) =
 handleMenuEvent (VtyEvent (V.EvKey V.KEnter [])) = do
     s <- get
     case asMenuIndex s of
-        0 -> startDrill WritingMode  -- Writing drill
-        1 -> startDrill ReadingMode  -- Reading drill
-        2 -> startDrill TypingMode   -- Typing drill
-        3 -> startTypingPractice     -- Typing practice with levels
+        0 -> startTypingPractice     -- Learn keyboard with levels (start here!)
+        1 -> startDrill TypingMode   -- Typing drill
+        2 -> startDrill ReadingMode  -- Reading drill
+        3 -> startDrill WritingMode  -- Writing drill (most advanced)
         4 -> modify $ \st -> st { asScreen = ProgressScreen }
         5 -> modify $ \st -> st { asScreen = HelpScreen }
         6 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
@@ -66,6 +76,7 @@ handleMenuEvent (VtyEvent (V.EvKey (V.KChar '?') [])) =
 handleMenuEvent _ = pure ()
 
 -- | Start a drill session
+-- Prioritizes due cards (from SRS), then new cards, max 10 total
 startDrill :: DrillMode -> EventM Name AppState ()
 startDrill mode = do
     s <- get
@@ -77,13 +88,33 @@ startDrill mode = do
                     WritingMode -> Writing
                     ReadingMode -> Reading
                     TypingMode -> Typing
-            let prompts = map (generateExercisePrompt exType) (take 10 cards)
-            let drill = initialDrillState mode prompts
-            modify $ \st -> st
-                { asScreen = DrillScreen
-                , asDrill = Just drill
-                , asMessage = Nothing
-                }
+
+            -- Select cards: prioritize due cards, then new cards
+            let dueCardIds = asDueCards s
+                vocabStates = asVocabStates s
+                cardMap = Map.fromList [(vocabId c, c) | c <- cards]
+
+                -- Get due cards (cards that have been reviewed before and are due)
+                dueCards = [c | vid <- dueCardIds
+                             , Just c <- [Map.lookup vid cardMap]]
+
+                -- Get new cards (never reviewed)
+                newCards = [c | c <- cards
+                             , not (Map.member (vocabId c) vocabStates)]
+
+                -- Take up to 10: due first, then new
+                selectedCards = take 10 (dueCards ++ newCards)
+
+            if null selectedCards
+                then modify $ \st -> st { asMessage = Just "No cards due for review!" }
+                else do
+                    let prompts = map (generateExercisePrompt exType) selectedCards
+                        drill = initialDrillState mode prompts
+                    modify $ \st -> st
+                        { asScreen = DrillScreen
+                        , asDrill = Just drill
+                        , asMessage = Nothing
+                        }
 
 -- | Handle drill events
 handleDrillEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
@@ -154,7 +185,11 @@ submitAnswer = do
             let idx = dsCurrentIndex drill
             when (idx < length (dsExercises drill)) $ do
                 let prompt = dsExercises drill !! idx
-                let isCorrect = checkAnswer prompt (dsUserInput drill)
+                    isCorrect = checkAnswer prompt (dsUserInput drill)
+                    vocabId' = epVocabId prompt
+                    exType = epExerciseType prompt
+
+                -- Update drill state
                 modify $ \st -> st
                     { asDrill = Just $ drill
                         { dsShowResult = Just isCorrect
@@ -163,13 +198,27 @@ submitAnswer = do
                         }
                     }
 
--- | Record result and advance to next exercise
+                -- Update SRS state
+                let quality = if isCorrect then Good else Again
+                updateCardSRS vocabId' quality exType
+
+-- | Record result and advance to next exercise (for reading mode)
 recordAndAdvance :: Bool -> EventM Name AppState ()
 recordAndAdvance isCorrect = do
     s <- get
     case asDrill s of
         Nothing -> pure ()
         Just drill -> do
+            let idx = dsCurrentIndex drill
+            when (idx < length (dsExercises drill)) $ do
+                let prompt = dsExercises drill !! idx
+                    vocabId' = epVocabId prompt
+                    exType = epExerciseType prompt
+                    quality = if isCorrect then Good else Again
+
+                -- Update SRS state
+                updateCardSRS vocabId' quality exType
+
             let newDrill = drill
                     { dsCorrectCount = if isCorrect then dsCorrectCount drill + 1 else dsCorrectCount drill
                     , dsTotalCount = dsTotalCount drill + 1
@@ -211,6 +260,61 @@ endDrill = do
         , asDrill = Nothing
         , asMessage = msg
         }
+
+-- | Update SRS state for a vocabulary card after review
+-- 1. Get current state from asVocabStates (or initialize new)
+-- 2. Call SM-2 algorithm to calculate new state
+-- 3. Update asVocabStates in memory
+-- 4. Persist via runJsonRepository
+-- 5. Log the activity
+updateCardSRS :: VocabularyId -> Quality -> ExerciseType -> EventM Name AppState ()
+updateCardSRS vocabId' quality exType = do
+    s <- get
+
+    -- Get current time
+    utcNow <- liftIO getCurrentTime
+    let now = utcToLocalTime utc utcNow
+
+    -- Get or initialize vocabulary state
+    let vocabStates = asVocabStates s
+        currentState = case Map.lookup vocabId' vocabStates of
+            Just state -> state
+            Nothing -> newVocabularyState vocabId' now
+
+    -- Calculate new SRS state using SM-2
+    let srsResult = calculateReview defaultSM2 currentState quality now
+        newState = applySRSResult currentState quality now srsResult
+
+    -- Update in-memory state
+    let newVocabStates = Map.insert vocabId' newState vocabStates
+
+    -- Recalculate due cards
+    let newDueCards = Map.keys $ Map.filter isDue newVocabStates
+        isDue state = vstNextReviewDate state <= now
+
+    modify $ \st -> st
+        { asVocabStates = newVocabStates
+        , asDueCards = newDueCards
+        }
+
+    -- Persist to JSON
+    liftIO $ runJsonRepository $ saveVocabState newState
+
+    -- Log activity
+    let performance = Performance
+            { perfAccuracy = Percentage (if quality >= Good then 100 else 0)
+            , perfTimeSpent = 0  -- TODO: track actual time
+            , perfWpm = Nothing
+            }
+        activity = ActivityEntry
+            { actDate = now
+            , actExerciseType = exType
+            , actVocabularyId = Just vocabId'
+            , actPerformance = performance
+            , actSuccess = quality >= Good
+            , actNotes = Nothing
+            }
+    liftIO $ runJsonRepository $ logActivity activity
 
 -- | Handle progress screen events
 handleProgressEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
