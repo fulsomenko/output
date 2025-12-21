@@ -31,6 +31,7 @@ library
         Output.Repository.Class
         Output.Repository.Json
         Output.Repository.Memory
+        Output.Algorithm.SRS
         Output.Algorithm.SpacedRepetition
         Output.Algorithm.ExerciseGen
         Output.Algorithm.Streak
