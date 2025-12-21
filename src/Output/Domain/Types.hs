@@ -8,6 +8,8 @@ module Output.Domain.Types
     , ExerciseType(..)
     , MasteryLevel(..)
     , VocabularyState(..)
+    , defaultEaseFactor
+    , newVocabularyState
     , UserProgress(..)
       -- * Typing Progress
     , TypingProgress(..)
@@ -75,10 +77,30 @@ data VocabularyState = VocabularyState
     , vstReviewCount :: Int
     , vstCorrectCount :: Int
     , vstIncorrectCount :: Int
+    , vstEaseFactor :: Double       -- SM-2 ease factor (default 2.5)
+    , vstCurrentInterval :: Integer -- Current interval in days
     } deriving (Show, Eq, Generic)
 
 instance FromJSON VocabularyState
 instance ToJSON VocabularyState
+
+-- | Default ease factor for SM-2 algorithm
+defaultEaseFactor :: Double
+defaultEaseFactor = 2.5
+
+-- | Create initial vocabulary state for a new card
+newVocabularyState :: VocabularyId -> LocalTime -> VocabularyState
+newVocabularyState vid now = VocabularyState
+    { vstVocabId = vid
+    , vstMasteryLevel = New
+    , vstLastReviewDate = Nothing
+    , vstNextReviewDate = now  -- Due immediately
+    , vstReviewCount = 0
+    , vstCorrectCount = 0
+    , vstIncorrectCount = 0
+    , vstEaseFactor = defaultEaseFactor
+    , vstCurrentInterval = 0
+    }
 
 -- | Overall user progress and state
 data UserProgress = UserProgress
