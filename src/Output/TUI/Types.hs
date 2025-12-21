@@ -16,6 +16,9 @@ module Output.TUI.Types
     , LevelSelectMode(..)
     , initialTypingState
     , emptyTypingStats
+      -- * Session Stats
+    , SessionStats(..)
+    , emptySessionStats
       -- * Application State
     , AppState(..)
     , AppEvent(..)
@@ -41,7 +44,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Time (UTCTime)
+import Data.Time (UTCTime, LocalTime)
 import Brick (AttrName, attrName)
 import GHC.Generics (Generic)
 
@@ -170,6 +173,23 @@ initialTypingState level exType prompts words = TypingState
     , typSelectedIndex = 0
     }
 
+-- | Session statistics for today's practice
+data SessionStats = SessionStats
+    { ssCardsReviewed :: Int      -- Cards reviewed this session
+    , ssCorrectCount :: Int       -- Correct answers this session
+    , ssNewCardsLearned :: Int    -- New cards encountered this session
+    , ssSessionStart :: LocalTime -- When this session started
+    } deriving (Show, Eq, Generic)
+
+-- | Empty session stats (for new session)
+emptySessionStats :: LocalTime -> SessionStats
+emptySessionStats now = SessionStats
+    { ssCardsReviewed = 0
+    , ssCorrectCount = 0
+    , ssNewCardsLearned = 0
+    , ssSessionStart = now
+    }
+
 -- | Custom events for the application
 data AppEvent
     = Tick  -- For timers if needed
@@ -179,13 +199,18 @@ data AppEvent
 data AppState = AppState
     { asScreen :: Screen
     , asDrill :: Maybe DrillState
-    , asTyping :: Maybe TypingState       -- Typing practice state
-    , asMenuIndex :: Int                  -- Selected menu item
-    , asVocabCards :: [VocabularyCard]    -- Loaded vocabulary
-    , asProgress :: Maybe UserProgress    -- User's progress
-    , asMessage :: Maybe Text             -- Status message
-    , asTypingWords :: [TypingWord]       -- Typing vocabulary words
-    , asTypingProgress :: TypingProgress  -- Typing level completion status
+    , asTyping :: Maybe TypingState         -- Typing practice state
+    , asMenuIndex :: Int                    -- Selected menu item
+    , asVocabCards :: [VocabularyCard]      -- Loaded vocabulary
+    , asProgress :: Maybe UserProgress      -- User's progress (legacy)
+    , asMessage :: Maybe Text               -- Status message
+    , asTypingWords :: [TypingWord]         -- Typing vocabulary words
+    , asTypingProgress :: TypingProgress    -- Typing level completion status
+    -- SRS-related state
+    , asVocabStates :: Map VocabularyId VocabularyState  -- Live SRS states
+    , asDueCards :: [VocabularyId]          -- Cards due for review
+    , asSessionStats :: Maybe SessionStats  -- Today's session stats
+    , asDailyStreak :: Int                  -- Current streak in days
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -200,6 +225,11 @@ initialAppState = AppState
     , asMessage = Nothing
     , asTypingWords = []
     , asTypingProgress = emptyTypingProgress
+    -- SRS defaults
+    , asVocabStates = Map.empty
+    , asDueCards = []
+    , asSessionStats = Nothing
+    , asDailyStreak = 0
     }
 
 -- | Attribute names for styling
