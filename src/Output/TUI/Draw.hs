@@ -13,8 +13,9 @@ import Data.Text (Text)
 
 import Output.TUI.Types
 import Output.Domain.Exercise (ExercisePrompt(..))
-import Output.Domain.Types (UserProgress(..), TypingProgress)
+import Output.Domain.Types (TypingProgress, VocabularyState(..), MasteryLevel(..))
 import Output.TUI.Widgets.TypingPractice
+import qualified Data.Map as Map
 
 -- | Main draw function
 drawUI :: AppState -> [Widget Name]
@@ -56,10 +57,10 @@ drawMenuItems :: AppState -> Widget Name
 drawMenuItems s = vBox $ zipWith (drawMenuItem (asMenuIndex s)) [0..] menuOptions
   where
     menuOptions =
-        [ ("Start Writing Drill", "Translate English to Korean")
-        , ("Start Reading Drill", "Read Korean and self-grade")
-        , ("Start Typing Drill", "Type Korean with instant feedback")
-        , ("Typing Practice", "Learn Korean keyboard with levels")
+        [ ("Typing Practice", "Learn Korean keyboard with guided levels")
+        , ("Typing Drill", "Practice typing Korean words")
+        , ("Reading Drill", "Read Korean and self-grade")
+        , ("Writing Drill", "Translate English to Korean")
         , ("View Progress", "See your learning statistics")
         , ("Help", "View keyboard shortcuts")
         , ("Quit", "Exit the application")
@@ -74,14 +75,22 @@ drawMenuItem selected idx (name, desc)
 
 -- | Draw stats summary
 drawStats :: AppState -> Widget Name
-drawStats s = hBox
-    [ txt "Cards loaded: "
-    , txt $ T.pack $ show (length $ asVocabCards s)
-    , fill ' '
+drawStats s = vBox
+    [ hBox
+        [ withAttr statsAttr $ txt $ T.pack (show dueCount) <> " cards due"
+        , txt " | "
+        , withAttr correctAttr $ txt $ "Streak: " <> T.pack (show $ asDailyStreak s) <> " days"
+        , fill ' '
+        , txt "Total: "
+        , txt $ T.pack $ show (length $ asVocabCards s)
+        , txt " cards"
+        ]
     , case asMessage s of
-        Just msg -> withAttr hintAttr $ txt msg
+        Just msg -> padTop (Pad 1) $ withAttr hintAttr $ txt msg
         Nothing -> emptyWidget
     ]
+  where
+    dueCount = length (asDueCards s)
 
 -- | Draw drill screen
 drawDrill :: DrillState -> Widget Name
@@ -188,15 +197,30 @@ drawProgress :: AppState -> Widget Name
 drawProgress s =
     withBorderStyle unicodeBold $
     borderWithLabel (withAttr titleAttr $ txt " Your Progress ") $
-    padAll 2 $ case asProgress s of
-        Nothing -> center $ txt "No progress data yet. Start practicing!"
-        Just progress -> vBox
-            [ txt $ "Current TOPIK Level: " <> T.pack (show $ upCurrentLevel progress)
-            , txt $ "Daily Streak: " <> T.pack (show $ upDailyStreak progress) <> " days"
-            , padTop (Pad 1) $ txt $ "Words Learned: " <> T.pack (show $ upTotalWordsLearned progress)
-            , txt $ "Words Reviewed: " <> T.pack (show $ upTotalWordsReviewed progress)
-            , padTop (Pad 2) $ withAttr hintAttr $ txt "Press Esc to return to menu"
+    padAll 2 $ vBox
+        [ -- Streak banner
+          center $ withAttr correctAttr $ txt $
+              "🔥 " <> T.pack (show $ asDailyStreak s) <> " day streak!"
+        , padTop (Pad 1) $ hBorder
+        , padTop (Pad 1) $ txt "Mastery Breakdown:"
+        , padTop (Pad 1) $ vBox
+            [ hBox [ txt "  New:          ", withAttr statsAttr $ txt $ T.pack (show newCount) ]
+            , hBox [ txt "  Learning:     ", withAttr hintAttr $ txt $ T.pack (show learningCount) ]
+            , hBox [ txt "  Intermediate: ", withAttr promptAttr $ txt $ T.pack (show intermediateCount) ]
+            , hBox [ txt "  Mastered:     ", withAttr correctAttr $ txt $ T.pack (show masteredCount) ]
             ]
+        , padTop (Pad 1) $ hBorder
+        , padTop (Pad 1) $ txt $ "Cards due for review: " <> T.pack (show $ length $ asDueCards s)
+        , txt $ "Total vocabulary: " <> T.pack (show $ length $ asVocabCards s)
+        , padTop (Pad 2) $ withAttr hintAttr $ txt "Press Esc to return to menu"
+        ]
+  where
+    vocabStates = asVocabStates s
+    states = Map.elems vocabStates
+    newCount = length $ filter (\vs -> vstMasteryLevel vs == New) states
+    learningCount = length $ filter (\vs -> vstMasteryLevel vs == Learning) states
+    intermediateCount = length $ filter (\vs -> vstMasteryLevel vs == Intermediate) states
+    masteredCount = length $ filter (\vs -> vstMasteryLevel vs == Mastered) states
 
 -- | Draw help screen
 drawHelp :: Widget Name
