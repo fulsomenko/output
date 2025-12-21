@@ -17,7 +17,7 @@ calculateStreak currentDate activities
     | otherwise =
         let sortedActivities = sortBy (comparing (Down . actDate)) activities
             dates = map (extractDate . actDate) sortedActivities
-            uniqueDates = reverse $ dedup dates
+            uniqueDates = dedup dates  -- Keep newest first, don't reverse
         in countConsecutiveDays currentDate uniqueDates
 
 -- | Extract just the date part from a LocalTime
