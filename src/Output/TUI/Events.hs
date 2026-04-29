@@ -215,7 +215,6 @@ recordAndAdvance quality = do
                 let prompt = dsExercises drill !! idx
                     vocabId' = epVocabId prompt
                     exType = epExerciseType prompt
-
                 -- Update SRS state
                 updateCardSRS vocabId' quality exType
 
