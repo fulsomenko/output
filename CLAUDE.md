@@ -175,6 +175,17 @@ cabal test
 # test/Main.hs composes specs from test/Output/Algorithm/*Spec.hs
 ```
 
+### TDD Workflow (mandatory — Red → Green → Refactor)
+
+1. **Red**: Write a failing test that specifies the expected behavior. Present tests to the user for review before implementing anything.
+2. **Green**: Write the minimum implementation needed to make the test pass. Do not over-engineer at this step.
+3. **Refactor**: Clean up implementation and tests without breaking anything. This step is not optional.
+4. No feature or fix is complete until all tests pass and the refactor step is done.
+
+**Test naming:** Names are living documentation. Use the pattern `describe/it` with descriptive strings, e.g. `describe "calculateIntervalDays" $ it "returns 1 day for first review"`. Avoid generic names like `test1`.
+
+**Test placement:** Pure domain and algorithm logic goes in `test/Output/Algorithm/` or `test/Output/Domain/` as inline Hspec specs. Repository behaviour uses `MemoryRepository` (IORef-based) — no real file I/O needed in tests.
+
 ## Don't
 
 - No orphan instances

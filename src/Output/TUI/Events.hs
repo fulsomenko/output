@@ -6,6 +6,7 @@ module Output.TUI.Events
 
 import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
+import Data.Char (digitToInt)
 import Brick
 import qualified Graphics.Vty as V
 import qualified Data.Text as T
@@ -29,7 +30,7 @@ import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), c
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
 import Output.Repository.Json (runJsonRepository)
 import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity)
-import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..))
+import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..), ratingToQuality)
 import Output.Algorithm.SpacedRepetition (defaultSM2, applySRSResult)
 import qualified Data.Set as Set
 
@@ -165,14 +166,14 @@ handleReadingDrill (VtyEvent (V.EvKey (V.KChar c) [])) | c `elem` ['1'..'4'] = d
     case asDrill s of
         Nothing -> pure ()
         Just drill -> when (dsRevealAnswer drill) $ do
-            let isCorrect = c >= '3'  -- 3 or 4 = correct, 1 or 2 = incorrect
-            recordAndAdvance isCorrect
+            let quality = ratingToQuality (digitToInt c)
+            recordAndAdvance quality
 handleReadingDrill (VtyEvent (V.EvKey V.KEnter [])) = do
     s <- get
     case asDrill s of
         Nothing -> pure ()
         Just drill -> when (dsRevealAnswer drill) $
-            recordAndAdvance True  -- Default to correct on Enter
+            recordAndAdvance Good  -- Default to Good on Enter
 handleReadingDrill _ = pure ()
 
 -- | Submit an answer and check correctness
@@ -203,8 +204,8 @@ submitAnswer = do
                 updateCardSRS vocabId' quality exType
 
 -- | Record result and advance to next exercise (for reading mode)
-recordAndAdvance :: Bool -> EventM Name AppState ()
-recordAndAdvance isCorrect = do
+recordAndAdvance :: Quality -> EventM Name AppState ()
+recordAndAdvance quality = do
     s <- get
     case asDrill s of
         Nothing -> pure ()
@@ -214,13 +215,11 @@ recordAndAdvance isCorrect = do
                 let prompt = dsExercises drill !! idx
                     vocabId' = epVocabId prompt
                     exType = epExerciseType prompt
-                    quality = if isCorrect then Good else Again
-
                 -- Update SRS state
                 updateCardSRS vocabId' quality exType
 
             let newDrill = drill
-                    { dsCorrectCount = if isCorrect then dsCorrectCount drill + 1 else dsCorrectCount drill
+                    { dsCorrectCount = if quality >= Good then dsCorrectCount drill + 1 else dsCorrectCount drill
                     , dsTotalCount = dsTotalCount drill + 1
                     }
             put $ s { asDrill = Just newDrill }
