@@ -88,3 +88,4 @@ test-suite output-test
     other-modules:
         Output.Algorithm.SpacedRepetitionSpec
         Output.Algorithm.StreakSpec
+        Output.Algorithm.SRSSpec
