@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "git": {
+      "command": "nix",
+      "args": ["run", ".#mcp-server-git"]
+    },
+    "kanban": {
+      "command": "kanban-mcp",
+      "args": ["/home/max/notes/memes/output.json"]
+    }
+  }
+}
