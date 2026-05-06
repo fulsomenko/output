@@ -85,6 +85,7 @@ runTUI = do
             , asVocabStates = vocabStates
             , asDueCards = dueCards
             , asDailyStreak = streak
+            , asActivities = activities
             }
 
     -- Build vty and run

@@ -49,6 +49,7 @@ import Brick (AttrName, attrName)
 import GHC.Generics (Generic)
 
 import Output.Domain.Types
+import Output.Domain.Activity (ActivityEntry)
 import Output.Domain.Exercise (ExercisePrompt)
 import Output.Domain.Jamo (Jamo)
 import Output.Domain.TypingLevel (TypingLevel)
@@ -73,6 +74,7 @@ data Screen
     | TypingPracticeScreen
     | TypingLevelSelectScreen
     | ProgressScreen
+    | StatsScreen
     | HelpScreen
     | QuitConfirmScreen
     deriving (Show, Eq)
@@ -211,6 +213,7 @@ data AppState = AppState
     , asDueCards :: [VocabularyId]          -- Cards due for review
     , asSessionStats :: Maybe SessionStats  -- Today's session stats
     , asDailyStreak :: Int                  -- Current streak in days
+    , asActivities :: [ActivityEntry]       -- Full activity log
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -230,6 +233,7 @@ initialAppState = AppState
     , asDueCards = []
     , asSessionStats = Nothing
     , asDailyStreak = 0
+    , asActivities = []
     }
 
 -- | Attribute names for styling

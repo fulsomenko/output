@@ -10,10 +10,16 @@ import Brick.Widgets.Border.Style
 import Brick.Widgets.Center
 import qualified Data.Text as T
 import Data.Text (Text)
+import Data.List (sortBy, nub, intersperse)
+import Data.Maybe (catMaybes)
+import Data.Time (localDay)
+import Data.Time.Calendar (Day)
+import Data.Time.Format (formatTime, defaultTimeLocale)
 
 import Output.TUI.Types
 import Output.Domain.Exercise (ExercisePrompt(..))
-import Output.Domain.Types (TypingProgress, VocabularyState(..), MasteryLevel(..))
+import Output.Domain.Types (TypingProgress, VocabularyState(..), MasteryLevel(..), ExerciseType(..))
+import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
 import Output.TUI.Widgets.TypingPractice
 import qualified Data.Map as Map
 
@@ -33,6 +39,7 @@ drawUI s = [ui]
             Just ts -> drawLevelSelectScreen ts (asTypingProgress s)
             Nothing -> drawMainMenu s
         ProgressScreen -> drawProgress s
+        StatsScreen -> drawStatsScreen s
         HelpScreen -> drawHelp
         QuitConfirmScreen -> drawQuitConfirm
 
@@ -62,6 +69,7 @@ drawMenuItems s = vBox $ zipWith (drawMenuItem (asMenuIndex s)) [0..] menuOption
         , ("Reading Drill", "Read Korean and self-grade")
         , ("Writing Drill", "Translate English to Korean")
         , ("View Progress", "See your learning statistics")
+        , ("Activity Stats", "View history of all practice sessions")
         , ("Help", "View keyboard shortcuts")
         , ("Quit", "Exit the application")
         ]
@@ -221,6 +229,60 @@ drawProgress s =
     learningCount = length $ filter (\vs -> vstMasteryLevel vs == Learning) states
     intermediateCount = length $ filter (\vs -> vstMasteryLevel vs == Intermediate) states
     masteredCount = length $ filter (\vs -> vstMasteryLevel vs == Mastered) states
+
+-- | Draw activity stats screen
+drawStatsScreen :: AppState -> Widget Name
+drawStatsScreen s =
+    withBorderStyle unicodeBold $
+    borderWithLabel (withAttr titleAttr $ txt " Activity Stats ") $
+    padAll 2 $ vBox
+        [ hCenter $ withAttr correctAttr $ txt $
+              "🔥 " <> T.pack (show $ asDailyStreak s) <> " day streak"
+        , padTop (Pad 1) $ hBorder
+        , padTop (Pad 1) $ if null activities
+            then withAttr hintAttr $ txt "No sessions recorded yet — go practice!"
+            else vBox $ map drawDayRow dayGroups
+        , fill ' '
+        , withAttr hintAttr $ txt "Press Esc to return to menu"
+        ]
+  where
+    activities = asActivities s
+    dayGroups  = groupActivitiesByDay activities
+
+groupActivitiesByDay :: [ActivityEntry] -> [(Day, [ActivityEntry])]
+groupActivitiesByDay entries =
+    let days = sortBy (\a b -> compare b a) $ nub $ map (localDay . actDate) entries
+    in  [(d, filter (\e -> localDay (actDate e) == d) entries) | d <- days]
+
+drawDayRow :: (Day, [ActivityEntry]) -> Widget Name
+drawDayRow (day, entries) = hBox $
+    [ withAttr hintAttr $ txt dateStr
+    , txt "  "
+    ] ++ intersperse (txt "   ") summaries
+  where
+    dateStr   = T.pack $ formatTime defaultTimeLocale "%b %d" day
+    summaries = catMaybes
+        [ drillSummary "Typing"  Typing  entries
+        , drillSummary "Reading" Reading entries
+        , drillSummary "Writing" Writing entries
+        ]
+
+drillSummary :: Text -> ExerciseType -> [ActivityEntry] -> Maybe (Widget Name)
+drillSummary label exType entries
+    | null group = Nothing
+    | otherwise  = Just $ hBox
+        [ withAttr promptAttr $ txt $ label <> " \xd7" <> T.pack (show count)
+        , txt "  "
+        , withAttr accAttr $ txt avgStr
+        ]
+  where
+    group   = filter (\a -> actExerciseType a == exType) entries
+    count   = length group
+    total   = sum [ v | e <- group, let Percentage v = perfAccuracy (actPerformance e) ]
+    avgAcc  = total / fromIntegral count
+    avgStr  = T.pack (show (round avgAcc :: Int)) <> "%"
+    anySucc = any actSuccess group
+    accAttr = if anySucc then correctAttr else hintAttr
 
 -- | Draw help screen
 drawHelp :: Widget Name

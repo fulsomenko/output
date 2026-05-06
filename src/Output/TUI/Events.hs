@@ -29,7 +29,7 @@ import Output.Domain.TypingWord (TypingWord(..))
 import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), createSessionPrompts, validateTyping, CharStatus(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
 import Output.Repository.Json (runJsonRepository)
-import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity)
+import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity, getAllActivities)
 import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..), ratingToQuality)
 import Output.Algorithm.SpacedRepetition (defaultSM2, applySRSResult)
 import qualified Data.Set as Set
@@ -44,6 +44,7 @@ handleEvent ev = do
         TypingPracticeScreen -> handleTypingEvent ev
         TypingLevelSelectScreen -> handleLevelSelectEvent ev
         ProgressScreen -> handleProgressEvent ev
+        StatsScreen -> handleStatsEvent ev
         HelpScreen -> handleHelpEvent ev
         QuitConfirmScreen -> handleQuitEvent ev
 
@@ -58,9 +59,9 @@ handleMenuEvent (VtyEvent (V.EvKey V.KUp [])) =
 handleMenuEvent (VtyEvent (V.EvKey (V.KChar 'k') [])) =
     modify $ \s -> s { asMenuIndex = max 0 (asMenuIndex s - 1) }
 handleMenuEvent (VtyEvent (V.EvKey V.KDown [])) =
-    modify $ \s -> s { asMenuIndex = min 6 (asMenuIndex s + 1) }
+    modify $ \s -> s { asMenuIndex = min 7 (asMenuIndex s + 1) }
 handleMenuEvent (VtyEvent (V.EvKey (V.KChar 'j') [])) =
-    modify $ \s -> s { asMenuIndex = min 6 (asMenuIndex s + 1) }
+    modify $ \s -> s { asMenuIndex = min 7 (asMenuIndex s + 1) }
 handleMenuEvent (VtyEvent (V.EvKey V.KEnter [])) = do
     s <- get
     case asMenuIndex s of
@@ -69,8 +70,11 @@ handleMenuEvent (VtyEvent (V.EvKey V.KEnter [])) = do
         2 -> startDrill ReadingMode  -- Reading drill
         3 -> startDrill WritingMode  -- Writing drill (most advanced)
         4 -> modify $ \st -> st { asScreen = ProgressScreen }
-        5 -> modify $ \st -> st { asScreen = HelpScreen }
-        6 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
+        5 -> do
+            freshActivities <- liftIO $ runJsonRepository getAllActivities
+            modify $ \st -> st { asScreen = StatsScreen, asActivities = freshActivities }
+        6 -> modify $ \st -> st { asScreen = HelpScreen }
+        7 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
         _ -> pure ()
 handleMenuEvent (VtyEvent (V.EvKey (V.KChar '?') [])) =
     modify $ \s -> s { asScreen = HelpScreen }
@@ -322,6 +326,14 @@ handleProgressEvent (VtyEvent (V.EvKey V.KEsc [])) =
 handleProgressEvent (VtyEvent (V.EvKey V.KEnter [])) =
     modify $ \s -> s { asScreen = MainMenuScreen }
 handleProgressEvent _ = pure ()
+
+-- | Handle stats screen events
+handleStatsEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+handleStatsEvent (VtyEvent (V.EvKey V.KEsc [])) =
+    modify $ \s -> s { asScreen = MainMenuScreen }
+handleStatsEvent (VtyEvent (V.EvKey V.KEnter [])) =
+    modify $ \s -> s { asScreen = MainMenuScreen }
+handleStatsEvent _ = pure ()
 
 -- | Handle help screen events
 handleHelpEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
@@ -632,6 +644,8 @@ endTypingPractice = do
     case asTyping s of
         Nothing -> modify $ \st -> st { asScreen = MainMenuScreen }
         Just ts -> do
+            utcNow <- liftIO getCurrentTime
+            let now = utcToLocalTime utc utcNow
             let stats = typStats ts
                 levelNum = tlNumber (typLevel ts)
                 accuracy = tsAccuracy stats
@@ -648,6 +662,23 @@ endTypingPractice = do
                         { tpCompletedLevels = Set.insert levelNum (tpCompletedLevels oldProgress)
                         }
                 modify $ \st -> st { asTypingProgress = newProgress }
+
+            -- Log activity so typing sessions count toward the streak
+            when completedEnough $ do
+                let performance = Performance
+                        { perfAccuracy  = Percentage accuracy
+                        , perfTimeSpent = 0
+                        , perfWpm       = Nothing
+                        }
+                    activity = ActivityEntry
+                        { actDate         = now
+                        , actExerciseType = Typing
+                        , actVocabularyId = Nothing
+                        , actPerformance  = performance
+                        , actSuccess      = shouldMarkComplete
+                        , actNotes        = Just (tlName (typLevel ts))
+                        }
+                liftIO $ runJsonRepository $ logActivity activity
 
             let completionNote = if shouldMarkComplete then " ★ Level complete!" else ""
                 msg = "Session complete! "
