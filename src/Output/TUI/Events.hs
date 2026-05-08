@@ -371,6 +371,7 @@ handleHelpEvent _ = pure ()
 
 -- | Handle quit confirmation events
 handleQuitEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+handleQuitEvent (VtyEvent (V.EvKey V.KEnter [])) = halt
 handleQuitEvent (VtyEvent (V.EvKey (V.KChar 'y') [])) = halt
 handleQuitEvent (VtyEvent (V.EvKey (V.KChar 'Y') [])) = halt
 handleQuitEvent (VtyEvent (V.EvKey (V.KChar 'n') [])) =
