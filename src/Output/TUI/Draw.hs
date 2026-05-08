@@ -238,7 +238,7 @@ groupActivitiesByDay entries =
 drawRow :: Bool -> [Widget Name] -> [Widget Name] -> [Widget Name] -> Widget Name
 drawRow isSelected left middle right =
     applyIf isSelected (withAttr menuSelectedAttr) $
-    hBox $ left ++ [txt "  "] ++ intersperse (txt "  ") middle ++ [padRight Max emptyWidget] ++ right
+    hBox $ left ++ [txt "  "] ++ intersperse (txt "  ") middle ++ [padRight Max emptyWidget, txt "  "] ++ right
 
 applyIf :: Bool -> (a -> a) -> a -> a
 applyIf True  f x = f x
