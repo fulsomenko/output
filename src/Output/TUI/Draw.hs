@@ -234,10 +234,19 @@ groupActivitiesByDay entries =
     let days = sortBy (\a b -> compare b a) $ nub $ map (localDay . actDate) entries
     in  [(d, filter (\e -> localDay (actDate e) == d) entries) | d <- days]
 
+-- | Draw a generic row with consistent spacing
+drawRow :: Bool -> [Widget Name] -> [Widget Name] -> [Widget Name] -> Widget Name
+drawRow isSelected left middle right =
+    applyIf isSelected (withAttr menuSelectedAttr) $
+    hBox $ left ++ [txt "  "] ++ intersperse (txt "  ") middle ++ [padRight Max emptyWidget] ++ right
+
+applyIf :: Bool -> (a -> a) -> a -> a
+applyIf True  f x = f x
+applyIf False _ x = x
+
 drawDayRow :: Int -> Int -> (Day, [ActivityEntry]) -> Widget Name
 drawDayRow selected idx (day, entries) =
-    applyIf (selected == idx) (withAttr menuSelectedAttr) $
-    hBox $ [txt dateStr, txt "  "] ++ intersperse (txt "   ") summaries
+    drawRow (selected == idx) [txt dateStr] summaries [txt ""]
   where
     dateStr   = T.pack $ formatTime defaultTimeLocale "%b %d" day
     summaries = catMaybes
@@ -245,10 +254,6 @@ drawDayRow selected idx (day, entries) =
         , drillSummary "Reading" Reading entries
         , drillSummary "Writing" Writing entries
         ]
-
-applyIf :: Bool -> (a -> a) -> a -> a
-applyIf True  f x = f x
-applyIf False _ x = x
 
 drillSummary :: Text -> ExerciseType -> [ActivityEntry] -> Maybe (Widget Name)
 drillSummary label exType entries
@@ -285,16 +290,11 @@ drawDayDetail s =
     dateHeader = T.pack $ formatTime defaultTimeLocale "%B %d, %Y" day
 
 drawDetailRow :: ActivityEntry -> Widget Name
-drawDetailRow entry = hBox
-    [ withAttr hintAttr  $ txt timeStr
-    , txt "  "
-    , withAttr promptAttr $ txt typeStr
-    , txt "  "
-    , padRight Max $ txt notesStr
-    , withAttr accAttr  $ txt accStr
-    , txt "  "
-    , withAttr succAttr $ txt succStr
-    ]
+drawDetailRow entry =
+    drawRow False
+        [withAttr hintAttr $ txt timeStr]
+        [withAttr promptAttr $ txt typeStr, txt notesStr]
+        [withAttr accAttr $ txt accStr, withAttr succAttr $ txt succStr]
   where
     timeStr  = T.pack $ formatTime defaultTimeLocale "%H:%M" (actDate entry)
     typeStr  = case actExerciseType entry of
