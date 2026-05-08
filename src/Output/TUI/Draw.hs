@@ -345,7 +345,7 @@ drawQuitConfirm =
     border $
     padAll 2 $ vBox
         [ txt "Are you sure you want to quit?"
-        , padTop (Pad 1) $ txt "[Enter/y] Quit  [n] Cancel"
+        , padTop (Pad 1) $ txt "[Y] Quit  [n] Cancel"
         ]
 
 -- | Draw typing practice screen with frame
