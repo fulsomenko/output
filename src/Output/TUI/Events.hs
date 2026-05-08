@@ -374,6 +374,8 @@ handleQuitEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
 handleQuitEvent (VtyEvent (V.EvKey V.KEnter [])) = halt
 handleQuitEvent (VtyEvent (V.EvKey (V.KChar 'y') [])) = halt
 handleQuitEvent (VtyEvent (V.EvKey (V.KChar 'Y') [])) = halt
+handleQuitEvent (VtyEvent (V.EvKey (V.KChar 'q') [])) = halt
+handleQuitEvent (VtyEvent (V.EvKey (V.KChar 'Q') [])) = halt
 handleQuitEvent (VtyEvent (V.EvKey (V.KChar 'n') [])) =
     modify $ \s -> s { asScreen = MainMenuScreen }
 handleQuitEvent (VtyEvent (V.EvKey (V.KChar 'N') [])) =
