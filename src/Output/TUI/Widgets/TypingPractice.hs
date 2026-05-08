@@ -98,11 +98,11 @@ drawHint prompt = case tpHint prompt of
 -- | Draw real-time input with composed Korean text
 drawRealTimeInput :: TypingState -> Widget Name
 drawRealTimeInput ts =
-    hCenter $ hLimit 60 $ borderWithLabel (txt " Your Input ") $ padAll 1 $
-        vLimit 5 $
+    hCenter $ hLimit 60 $ vLimit 5 $ borderWithLabel (txt " Your Input ") $ padAll 1 $
         vBox
             [ hCenter $ drawComposedInput ts
             , hCenter $ padTop (Pad 1) $ drawJamoInput ts
+            , fill ' '
             ]
 
 -- | Draw composed Korean text (main display)
