@@ -75,6 +75,7 @@ data Screen
     | TypingLevelSelectScreen
     | ProgressScreen
     | StatsScreen
+    | DayDetailScreen
     | HelpScreen
     | QuitConfirmScreen
     deriving (Show, Eq)
@@ -214,6 +215,7 @@ data AppState = AppState
     , asSessionStats :: Maybe SessionStats  -- Today's session stats
     , asDailyStreak :: Int                  -- Current streak in days
     , asActivities :: [ActivityEntry]       -- Full activity log
+    , asStatsSelectedDay :: Int             -- Selected day index in stats screen
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -234,6 +236,7 @@ initialAppState = AppState
     , asSessionStats = Nothing
     , asDailyStreak = 0
     , asActivities = []
+    , asStatsSelectedDay = 0
     }
 
 -- | Attribute names for styling

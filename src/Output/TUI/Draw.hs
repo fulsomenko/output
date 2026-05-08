@@ -30,18 +30,33 @@ drawUI s = [ui]
     ui = case asScreen s of
         MainMenuScreen -> drawMainMenu s
         DrillScreen -> case asDrill s of
-            Just drill -> drawDrill drill
+            Just drill -> drawDrill s drill
             Nothing -> drawMainMenu s
         TypingPracticeScreen -> case asTyping s of
-            Just ts -> drawTypingPracticeScreen ts
+            Just ts -> drawTypingPracticeScreen s ts
             Nothing -> drawMainMenu s
         TypingLevelSelectScreen -> case asTyping s of
-            Just ts -> drawLevelSelectScreen ts (asTypingProgress s)
+            Just ts -> drawLevelSelectScreen s ts (asTypingProgress s)
             Nothing -> drawMainMenu s
         ProgressScreen -> drawProgress s
         StatsScreen -> drawStatsScreen s
-        HelpScreen -> drawHelp
+        DayDetailScreen -> drawDayDetail s
+        HelpScreen -> drawHelp s
         QuitConfirmScreen -> drawQuitConfirm
+
+-- | Shared status bar shown at the bottom of every screen
+statusBar :: AppState -> Text -> Widget Name
+statusBar s hints = vBox
+    [ hBorder
+    , padLeftRight 1 $ hBox
+        [ withAttr correctAttr $ txt $ "🔥 " <> T.pack (show $ asDailyStreak s) <> " streak"
+        , txt "  ·  "
+        , padRight Max $ withAttr statsAttr $ txt $ T.pack (show dueCount) <> " due"
+        , withAttr hintAttr $ txt hints
+        ]
+    ]
+  where
+    dueCount = length (asDueCards s)
 
 -- | Draw main menu
 drawMainMenu :: AppState -> Widget Name
@@ -49,14 +64,12 @@ drawMainMenu s =
     withBorderStyle unicodeBold $
     borderWithLabel (withAttr titleAttr $ txt " Output - Korean Learning ") $
     vBox
-        [ padAll 2 $ center $ vBox
-            [ withAttr titleAttr $ txt "Welcome to Output!"
-            , padTop (Pad 1) $ txt "Learn Korean through active practice"
-            ]
-        , hBorder
-        , padAll 1 $ drawMenuItems s
-        , hBorder
-        , padAll 1 $ drawStats s
+        [ padAll 1 $ drawMenuItems s
+        , fill ' '
+        , case asMessage s of
+            Just msg -> padLeftRight 1 $ withAttr hintAttr $ txt msg
+            Nothing  -> emptyWidget
+        , statusBar s "[↑/↓] Navigate  [Enter] Select  [q] Quit"
         ]
 
 -- | Draw menu items
@@ -65,13 +78,13 @@ drawMenuItems s = vBox $ zipWith (drawMenuItem (asMenuIndex s)) [0..] menuOption
   where
     menuOptions =
         [ ("Typing Practice", "Learn Korean keyboard with guided levels")
-        , ("Typing Drill", "Practice typing Korean words")
-        , ("Reading Drill", "Read Korean and self-grade")
-        , ("Writing Drill", "Translate English to Korean")
-        , ("View Progress", "See your learning statistics")
-        , ("Activity Stats", "View history of all practice sessions")
-        , ("Help", "View keyboard shortcuts")
-        , ("Quit", "Exit the application")
+        , ("Typing Drill",    "Practice typing Korean words")
+        , ("Reading Drill",   "Read Korean and self-grade")
+        , ("Writing Drill",   "Translate English to Korean")
+        , ("View Progress",   "See your learning statistics")
+        , ("Activity Stats",  "View history of all practice sessions")
+        , ("Help",            "View keyboard shortcuts")
+        , ("Quit",            "Exit the application")
         ]
 
 drawMenuItem :: Int -> Int -> (Text, Text) -> Widget Name
@@ -81,28 +94,9 @@ drawMenuItem selected idx (name, desc)
     | otherwise = withAttr menuAttr $
         hBox [txt "   ", txt name, txt " - ", txt desc]
 
--- | Draw stats summary
-drawStats :: AppState -> Widget Name
-drawStats s = vBox
-    [ hBox
-        [ withAttr statsAttr $ txt $ T.pack (show dueCount) <> " cards due"
-        , txt " | "
-        , withAttr correctAttr $ txt $ "Streak: " <> T.pack (show $ asDailyStreak s) <> " days"
-        , fill ' '
-        , txt "Total: "
-        , txt $ T.pack $ show (length $ asVocabCards s)
-        , txt " cards"
-        ]
-    , case asMessage s of
-        Just msg -> padTop (Pad 1) $ withAttr hintAttr $ txt msg
-        Nothing -> emptyWidget
-    ]
-  where
-    dueCount = length (asDueCards s)
-
 -- | Draw drill screen
-drawDrill :: DrillState -> Widget Name
-drawDrill drill =
+drawDrill :: AppState -> DrillState -> Widget Name
+drawDrill s drill =
     withBorderStyle unicodeBold $
     vBox
         [ borderWithLabel (withAttr titleAttr $ txt $ " " <> modeLabel <> " ") $
@@ -112,15 +106,20 @@ drawDrill drill =
                 , padTop (Pad 1) $ drawExercise drill
                 , padTop (Pad 1) $ drawInput drill
                 , padTop (Pad 1) $ drawFeedback drill
+                , fill ' '
                 ]
-        , hBorder
-        , padLeftRight 2 $ drawDrillControls drill
+        , statusBar s drillHints
         ]
   where
     modeLabel = case dsMode drill of
         WritingMode -> "Writing Practice"
         ReadingMode -> "Reading Practice"
-        TypingMode -> "Typing Practice"
+        TypingMode  -> "Typing Practice"
+    drillHints = case dsMode drill of
+        ReadingMode -> "[Space] Reveal  [1-4] Rate  [Esc] Exit"
+        _ -> case dsShowResult drill of
+            Nothing -> "[Enter] Submit  [Esc] Exit"
+            Just _  -> "[Enter] Next  [Esc] Exit"
 
 -- | Draw progress bar for drill
 drawProgress' :: DrillState -> Widget Name
@@ -139,8 +138,8 @@ drawProgress' drill = hBox
 -- | Draw current exercise
 drawExercise :: DrillState -> Widget Name
 drawExercise drill = case currentExercise of
-    Nothing -> center $ txt "No more exercises!"
-    Just prompt -> center $ vBox
+    Nothing -> txt "No more exercises!"
+    Just prompt -> vBox
         [ withAttr promptAttr $ txt $ promptLabel (dsMode drill)
         , padTop (Pad 1) $ txtWrap $ epQuestion prompt
         , if dsRevealAnswer drill
@@ -151,36 +150,35 @@ drawExercise drill = case currentExercise of
     currentExercise = if dsCurrentIndex drill < length (dsExercises drill)
         then Just $ dsExercises drill !! dsCurrentIndex drill
         else Nothing
-
     promptLabel WritingMode = "Translate to Korean:"
     promptLabel ReadingMode = "What does this mean?"
-    promptLabel TypingMode = "Type this in Korean:"
+    promptLabel TypingMode  = "Type this in Korean:"
 
 -- | Draw input field
 drawInput :: DrillState -> Widget Name
 drawInput drill = case dsMode drill of
-    ReadingMode -> emptyWidget  -- No input for reading mode
-    _ -> center $
+    ReadingMode -> emptyWidget
+    _ -> hCenter $
         hLimit 50 $
         vLimit 3 $
         withBorderStyle unicode $
         borderWithLabel (txt " Your Answer ") $
         padAll 1 $
         case dsShowResult drill of
-            Nothing -> txt $ dsUserInput drill <> "│"
-            Just True -> withAttr correctAttr $ txt $ dsUserInput drill
+            Nothing   -> txt $ dsUserInput drill <> "│"
+            Just True -> withAttr correctAttr  $ txt $ dsUserInput drill
             Just False -> withAttr incorrectAttr $ txt $ dsUserInput drill
 
 -- | Draw feedback after answer
 drawFeedback :: DrillState -> Widget Name
 drawFeedback drill = case dsShowResult drill of
-    Nothing -> emptyWidget
-    Just True -> center $ withAttr correctAttr $ txt "✓ Correct! Press Enter to continue"
-    Just False -> center $ vBox
+    Nothing    -> emptyWidget
+    Just True  -> withAttr correctAttr $ txt "✓ Correct! Press Enter to continue"
+    Just False -> vBox
         [ withAttr incorrectAttr $ txt "✗ Incorrect"
         , case currentExercise of
             Just prompt -> txt $ "Expected: " <> epExpectedAnswer prompt
-            Nothing -> emptyWidget
+            Nothing     -> emptyWidget
         , txt "Press Enter to continue"
         ]
   where
@@ -188,47 +186,31 @@ drawFeedback drill = case dsShowResult drill of
         then Just $ dsExercises drill !! dsCurrentIndex drill
         else Nothing
 
--- | Draw drill control hints
-drawDrillControls :: DrillState -> Widget Name
-drawDrillControls drill = case dsMode drill of
-    ReadingMode -> hBox
-        [ txt "[Space] Reveal Answer | [1-4] Rate (1=Hard, 4=Easy) | [Esc] Exit"
-        ]
-    _ -> hBox
-        [ case dsShowResult drill of
-            Nothing -> txt "[Enter] Submit | [Esc] Exit"
-            Just _ -> txt "[Enter] Next | [Esc] Exit"
-        ]
-
 -- | Draw progress screen
 drawProgress :: AppState -> Widget Name
 drawProgress s =
     withBorderStyle unicodeBold $
     borderWithLabel (withAttr titleAttr $ txt " Your Progress ") $
     padAll 2 $ vBox
-        [ -- Streak banner
-          center $ withAttr correctAttr $ txt $
-              "🔥 " <> T.pack (show $ asDailyStreak s) <> " day streak!"
-        , padTop (Pad 1) $ hBorder
-        , padTop (Pad 1) $ txt "Mastery Breakdown:"
+        [ txt "Mastery Breakdown:"
         , padTop (Pad 1) $ vBox
-            [ hBox [ txt "  New:          ", withAttr statsAttr $ txt $ T.pack (show newCount) ]
-            , hBox [ txt "  Learning:     ", withAttr hintAttr $ txt $ T.pack (show learningCount) ]
+            [ hBox [ txt "  New:          ", withAttr statsAttr  $ txt $ T.pack (show newCount) ]
+            , hBox [ txt "  Learning:     ", withAttr hintAttr   $ txt $ T.pack (show learningCount) ]
             , hBox [ txt "  Intermediate: ", withAttr promptAttr $ txt $ T.pack (show intermediateCount) ]
             , hBox [ txt "  Mastered:     ", withAttr correctAttr $ txt $ T.pack (show masteredCount) ]
             ]
         , padTop (Pad 1) $ hBorder
         , padTop (Pad 1) $ txt $ "Cards due for review: " <> T.pack (show $ length $ asDueCards s)
         , txt $ "Total vocabulary: " <> T.pack (show $ length $ asVocabCards s)
-        , padTop (Pad 2) $ withAttr hintAttr $ txt "Press Esc to return to menu"
+        , fill ' '
+        , statusBar s "[Esc] Back"
         ]
   where
-    vocabStates = asVocabStates s
-    states = Map.elems vocabStates
-    newCount = length $ filter (\vs -> vstMasteryLevel vs == New) states
-    learningCount = length $ filter (\vs -> vstMasteryLevel vs == Learning) states
+    states = Map.elems (asVocabStates s)
+    newCount          = length $ filter (\vs -> vstMasteryLevel vs == New)          states
+    learningCount     = length $ filter (\vs -> vstMasteryLevel vs == Learning)     states
     intermediateCount = length $ filter (\vs -> vstMasteryLevel vs == Intermediate) states
-    masteredCount = length $ filter (\vs -> vstMasteryLevel vs == Mastered) states
+    masteredCount     = length $ filter (\vs -> vstMasteryLevel vs == Mastered)     states
 
 -- | Draw activity stats screen
 drawStatsScreen :: AppState -> Widget Name
@@ -236,29 +218,26 @@ drawStatsScreen s =
     withBorderStyle unicodeBold $
     borderWithLabel (withAttr titleAttr $ txt " Activity Stats ") $
     padAll 2 $ vBox
-        [ hCenter $ withAttr correctAttr $ txt $
-              "🔥 " <> T.pack (show $ asDailyStreak s) <> " day streak"
-        , padTop (Pad 1) $ hBorder
-        , padTop (Pad 1) $ if null activities
+        [ if null activities
             then withAttr hintAttr $ txt "No sessions recorded yet — go practice!"
-            else vBox $ map drawDayRow dayGroups
+            else vBox $ zipWith (drawDayRow sel) [0..] dayGroups
         , fill ' '
-        , withAttr hintAttr $ txt "Press Esc to return to menu"
+        , statusBar s "[↑/↓] Navigate  [Enter] Details  [Esc] Back"
         ]
   where
     activities = asActivities s
     dayGroups  = groupActivitiesByDay activities
+    sel        = asStatsSelectedDay s
 
 groupActivitiesByDay :: [ActivityEntry] -> [(Day, [ActivityEntry])]
 groupActivitiesByDay entries =
     let days = sortBy (\a b -> compare b a) $ nub $ map (localDay . actDate) entries
     in  [(d, filter (\e -> localDay (actDate e) == d) entries) | d <- days]
 
-drawDayRow :: (Day, [ActivityEntry]) -> Widget Name
-drawDayRow (day, entries) = hBox $
-    [ withAttr hintAttr $ txt dateStr
-    , txt "  "
-    ] ++ intersperse (txt "   ") summaries
+drawDayRow :: Int -> Int -> (Day, [ActivityEntry]) -> Widget Name
+drawDayRow selected idx (day, entries) =
+    applyIf (selected == idx) (withAttr menuSelectedAttr) $
+    hBox $ [txt dateStr, txt "  "] ++ intersperse (txt "   ") summaries
   where
     dateStr   = T.pack $ formatTime defaultTimeLocale "%b %d" day
     summaries = catMaybes
@@ -266,6 +245,10 @@ drawDayRow (day, entries) = hBox $
         , drillSummary "Reading" Reading entries
         , drillSummary "Writing" Writing entries
         ]
+
+applyIf :: Bool -> (a -> a) -> a -> a
+applyIf True  f x = f x
+applyIf False _ x = x
 
 drillSummary :: Text -> ExerciseType -> [ActivityEntry] -> Maybe (Widget Name)
 drillSummary label exType entries
@@ -284,9 +267,50 @@ drillSummary label exType entries
     anySucc = any actSuccess group
     accAttr = if anySucc then correctAttr else hintAttr
 
+-- | Draw day detail screen
+drawDayDetail :: AppState -> Widget Name
+drawDayDetail s =
+    withBorderStyle unicodeBold $
+    borderWithLabel (withAttr titleAttr $ txt $ " " <> dateHeader <> " ") $
+    padAll 2 $ vBox
+        [ vBox $ map drawDetailRow dayEntries
+        , fill ' '
+        , statusBar s "[Esc] Back"
+        ]
+  where
+    groups = groupActivitiesByDay (asActivities s)
+    (day, dayEntries) = case drop (asStatsSelectedDay s) groups of
+        (x : _) -> x
+        []      -> (toEnum 0, [])
+    dateHeader = T.pack $ formatTime defaultTimeLocale "%B %d, %Y" day
+
+drawDetailRow :: ActivityEntry -> Widget Name
+drawDetailRow entry = hBox
+    [ withAttr hintAttr  $ txt timeStr
+    , txt "  "
+    , withAttr promptAttr $ txt typeStr
+    , txt "  "
+    , padRight Max $ txt notesStr
+    , withAttr accAttr  $ txt accStr
+    , txt "  "
+    , withAttr succAttr $ txt succStr
+    ]
+  where
+    timeStr  = T.pack $ formatTime defaultTimeLocale "%H:%M" (actDate entry)
+    typeStr  = case actExerciseType entry of
+        Typing  -> "Typing "
+        Reading -> "Reading"
+        Writing -> "Writing"
+    notesStr = maybe "—" id (actNotes entry)
+    Percentage accVal = perfAccuracy (actPerformance entry)
+    accStr   = T.pack (show (round accVal :: Int)) <> "%"
+    succStr  = if actSuccess entry then "✓" else " "
+    accAttr  = if actSuccess entry then correctAttr else hintAttr
+    succAttr = if actSuccess entry then correctAttr else hintAttr
+
 -- | Draw help screen
-drawHelp :: Widget Name
-drawHelp =
+drawHelp :: AppState -> Widget Name
+drawHelp s =
     withBorderStyle unicodeBold $
     borderWithLabel (withAttr titleAttr $ txt " Help ") $
     padAll 2 $ vBox
@@ -309,7 +333,8 @@ drawHelp =
             [ txt "  Space       - Reveal the translation"
             , txt "  1-4         - Rate difficulty (1=Again, 4=Easy)"
             ]
-        , padTop (Pad 2) $ withAttr hintAttr $ txt "Press Esc to return to menu"
+        , fill ' '
+        , statusBar s "[Esc] Back"
         ]
 
 -- | Draw quit confirmation
@@ -320,31 +345,26 @@ drawQuitConfirm =
     border $
     padAll 2 $ vBox
         [ txt "Are you sure you want to quit?"
-        , padTop (Pad 1) $ hBox
-            [ txt "[y] Yes  [n] No"
-            ]
+        , padTop (Pad 1) $ txt "[y] Yes  [n] No"
         ]
 
 -- | Draw typing practice screen with frame
-drawTypingPracticeScreen :: TypingState -> Widget Name
-drawTypingPracticeScreen ts =
+drawTypingPracticeScreen :: AppState -> TypingState -> Widget Name
+drawTypingPracticeScreen s ts =
     withBorderStyle unicodeBold $
     borderWithLabel (withAttr titleAttr $ txt " Korean Typing Practice ") $
     padAll 1 $ vBox
         [ drawTypingPractice ts
-        , hBorder
-        , padTop (Pad 1) $ hCenter $ hBox
-            [ txt "[Esc] Exit | [?] Toggle Hints | [Tab] Skip Word"
-            ]
+        , statusBar s "[Esc] Exit  [?] Toggle Hints  [Tab] Skip Word"
         ]
 
 -- | Draw level selector screen with frame
-drawLevelSelectScreen :: TypingState -> TypingProgress -> Widget Name
-drawLevelSelectScreen ts progress =
+drawLevelSelectScreen :: AppState -> TypingState -> TypingProgress -> Widget Name
+drawLevelSelectScreen s ts progress =
     withBorderStyle unicodeBold $
     borderWithLabel (withAttr titleAttr $ txt " Select Typing Level ") $
     padAll 2 $ vBox
-        [ center $ drawLevelSelector ts progress
-        , hBorder
-        , padTop (Pad 1) $ hCenter $ txt "[↑/↓] Navigate | [Enter] Select | [Esc] Back"
+        [ drawLevelSelector ts progress
+        , fill ' '
+        , statusBar s "[↑/↓] Navigate  [Enter] Select  [Esc] Back"
         ]

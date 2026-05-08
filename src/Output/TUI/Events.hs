@@ -10,7 +10,7 @@ import Data.Char (digitToInt)
 import Brick
 import qualified Graphics.Vty as V
 import qualified Data.Text as T
-import Data.Time (getCurrentTime, utcToLocalTime, utc)
+import Data.Time (getCurrentTime, utcToLocalTime, utc, localDay)
 import qualified Data.Map as Map
 
 import Output.TUI.Types
@@ -45,6 +45,7 @@ handleEvent ev = do
         TypingLevelSelectScreen -> handleLevelSelectEvent ev
         ProgressScreen -> handleProgressEvent ev
         StatsScreen -> handleStatsEvent ev
+        DayDetailScreen -> handleDayDetailEvent ev
         HelpScreen -> handleHelpEvent ev
         QuitConfirmScreen -> handleQuitEvent ev
 
@@ -72,7 +73,7 @@ handleMenuEvent (VtyEvent (V.EvKey V.KEnter [])) = do
         4 -> modify $ \st -> st { asScreen = ProgressScreen }
         5 -> do
             freshActivities <- liftIO $ runJsonRepository getAllActivities
-            modify $ \st -> st { asScreen = StatsScreen, asActivities = freshActivities }
+            modify $ \st -> st { asScreen = StatsScreen, asActivities = freshActivities, asStatsSelectedDay = 0 }
         6 -> modify $ \st -> st { asScreen = HelpScreen }
         7 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
         _ -> pure ()
@@ -331,9 +332,32 @@ handleProgressEvent _ = pure ()
 handleStatsEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
 handleStatsEvent (VtyEvent (V.EvKey V.KEsc [])) =
     modify $ \s -> s { asScreen = MainMenuScreen }
-handleStatsEvent (VtyEvent (V.EvKey V.KEnter [])) =
-    modify $ \s -> s { asScreen = MainMenuScreen }
+handleStatsEvent (VtyEvent (V.EvKey V.KUp [])) =
+    modify $ \s -> s { asStatsSelectedDay = max 0 (asStatsSelectedDay s - 1) }
+handleStatsEvent (VtyEvent (V.EvKey (V.KChar 'k') [])) =
+    modify $ \s -> s { asStatsSelectedDay = max 0 (asStatsSelectedDay s - 1) }
+handleStatsEvent (VtyEvent (V.EvKey V.KDown [])) = do
+    s <- get
+    let maxIdx = max 0 (Set.size (Set.fromList (map (localDay . actDate) (asActivities s))) - 1)
+    modify $ \st -> st { asStatsSelectedDay = min maxIdx (asStatsSelectedDay st + 1) }
+handleStatsEvent (VtyEvent (V.EvKey (V.KChar 'j') [])) = do
+    s <- get
+    let maxIdx = max 0 (Set.size (Set.fromList (map (localDay . actDate) (asActivities s))) - 1)
+    modify $ \st -> st { asStatsSelectedDay = min maxIdx (asStatsSelectedDay st + 1) }
+handleStatsEvent (VtyEvent (V.EvKey V.KEnter [])) = do
+    s <- get
+    if null (asActivities s)
+        then pure ()
+        else modify $ \st -> st { asScreen = DayDetailScreen }
 handleStatsEvent _ = pure ()
+
+-- | Handle day detail screen events
+handleDayDetailEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+handleDayDetailEvent (VtyEvent (V.EvKey V.KEsc [])) =
+    modify $ \s -> s { asScreen = StatsScreen }
+handleDayDetailEvent (VtyEvent (V.EvKey V.KEnter [])) =
+    modify $ \s -> s { asScreen = StatsScreen }
+handleDayDetailEvent _ = pure ()
 
 -- | Handle help screen events
 handleHelpEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
