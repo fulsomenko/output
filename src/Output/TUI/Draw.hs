@@ -13,7 +13,7 @@ import Data.Text (Text)
 import Data.List (sortBy, nub, intersperse)
 import Data.Maybe (catMaybes)
 import Data.Time (localDay)
-import Data.Time.Calendar (Day)
+import Data.Time.Calendar (Day, diffDays)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 
 import Output.TUI.Types
@@ -272,13 +272,98 @@ drillSummary label exType entries
     anySucc = any actSuccess group
     accAttr = if anySucc then correctAttr else hintAttr
 
+-- | Average accuracy across all entries
+avgAccuracy :: [ActivityEntry] -> Maybe Double
+avgAccuracy [] = Nothing
+avgAccuracy es = Just $ total / fromIntegral (length es)
+  where total = sum [ v | e <- es, let Percentage v = perfAccuracy (actPerformance e) ]
+
+-- | Day summary: type breakdown, sessions count, avg accuracy, pass count, trend
+drawDaySummary :: [ActivityEntry] -> Widget Name
+drawDaySummary entries = hBox
+    [ hBox $ intersperse (txt "   ") typeSummaries
+    , padLeft Max $ hBox
+        [ txt $ T.pack (show (length entries)) <> " sessions"
+        , txt "  ·  Avg "
+        , withAttr accAttr $ txt avgStr
+        , txt "  ·  "
+        , withAttr correctAttr $ txt $ T.pack (show passCount) <> " passed"
+        , txt "  "
+        , withAttr trendAttr $ txt trendStr
+        ]
+    ]
+  where
+    typeSummaries = catMaybes
+        [ drillSummary "Typing"  Typing  entries
+        , drillSummary "Reading" Reading entries
+        , drillSummary "Writing" Writing entries
+        ]
+    passCount = length $ filter actSuccess entries
+    avg       = avgAccuracy entries
+    avgStr    = maybe "—" (\v -> T.pack (show (round v :: Int)) <> "%") avg
+    accAttr   = if any actSuccess entries then correctAttr else hintAttr
+    sorted    = sortBy (\a b -> compare (actDate a) (actDate b)) entries
+    half      = length sorted `div` 2
+    (firstH, secondH) = splitAt (max 1 half) sorted
+    trendStr  = case (avgAccuracy firstH, avgAccuracy secondH) of
+        (Just f, Just s)
+            | s > f + 2  -> "↑ trend"
+            | s < f - 2  -> "↓ trend"
+        _                -> ""
+    trendAttr = case (avgAccuracy firstH, avgAccuracy secondH) of
+        (Just f, Just s) | s > f + 2 -> correctAttr
+                         | s < f - 2 -> incorrectAttr
+        _                             -> hintAttr
+
+-- | Day comparisons: vs previous practice day and vs 7-day average
+drawDayComparisons :: [(Day, [ActivityEntry])] -> Int -> Day -> Widget Name
+drawDayComparisons groups idx today = hBox $ intersperse (txt "   ·   ") comparisons
+  where
+    todayAvg = avgAccuracy $ concatMap snd $ take 1 $ drop idx groups
+
+    -- Previous practice day
+    prevComparison = case drop (idx + 1) groups of
+        ((prevDay, prevEntries) : _) ->
+            case (todayAvg, avgAccuracy prevEntries) of
+                (Just t, Just p) ->
+                    let delta = round (t - p) :: Int
+                        sign  = if delta >= 0 then "↑ +" else "↓ "
+                        label = T.pack $ formatTime defaultTimeLocale "%b %d" prevDay
+                        attr  = if delta >= 0 then correctAttr else incorrectAttr
+                    in  Just $ hBox [ withAttr attr $ txt $ sign <> T.pack (show (abs delta)) <> "%"
+                                    , withAttr hintAttr $ txt $ " vs. " <> label
+                                    , txt $ " (" <> T.pack (show (round p :: Int)) <> "%)"
+                                    ]
+                _ -> Nothing
+        _ -> Nothing
+
+    -- 7-day rolling average
+    sevenDayEntries = [ e | (d, es) <- groups
+                          , diffDays today d >= 1 && diffDays today d <= 7
+                          , e <- es ]
+    weekComparison = case (todayAvg, avgAccuracy sevenDayEntries) of
+        (Just t, Just w) ->
+            let delta = round (t - w) :: Int
+                sign  = if delta >= 0 then "↑ +" else "↓ "
+                attr  = if delta >= 0 then correctAttr else incorrectAttr
+            in  Just $ hBox [ withAttr attr $ txt $ sign <> T.pack (show (abs delta)) <> "%"
+                            , withAttr hintAttr $ txt " vs. 7-day avg"
+                            , txt $ " (" <> T.pack (show (round w :: Int)) <> "%)"
+                            ]
+        _ -> Nothing
+
+    comparisons = catMaybes [prevComparison, weekComparison]
+
 -- | Draw day detail screen
 drawDayDetail :: AppState -> Widget Name
 drawDayDetail s =
     withBorderStyle unicodeBold $
     borderWithLabel (withAttr titleAttr $ txt $ " " <> dateHeader <> " ") $
     padAll 2 $ vBox
-        [ vBox $ map drawDetailRow dayEntries
+        [ drawDaySummary dayEntries
+        , padTop (Pad 1) $ drawDayComparisons groups (asStatsSelectedDay s) day
+        , padTop (Pad 1) hBorder
+        , padTop (Pad 1) $ vBox $ map drawDetailRow dayEntries
         , fill ' '
         , statusBar s "[Esc] Back"
         ]
@@ -293,7 +378,7 @@ drawDetailRow :: ActivityEntry -> Widget Name
 drawDetailRow entry =
     drawRow False
         [withAttr hintAttr $ txt timeStr]
-        [withAttr promptAttr $ txt typeStr, txt notesStr]
+        ([ withAttr promptAttr $ txt typeStr, txt notesStr ] ++ wpmWidget)
         [withAttr accAttr $ txt accStr, withAttr succAttr $ txt succStr]
   where
     timeStr  = T.pack $ formatTime defaultTimeLocale "%H:%M" (actDate entry)
@@ -307,6 +392,9 @@ drawDetailRow entry =
     succStr  = if actSuccess entry then "✓" else " "
     accAttr  = if actSuccess entry then correctAttr else hintAttr
     succAttr = if actSuccess entry then correctAttr else hintAttr
+    wpmWidget = case perfWpm (actPerformance entry) of
+        Just w  -> [withAttr statsAttr $ txt $ T.pack (show w) <> "wpm"]
+        Nothing -> []
 
 -- | Draw help screen
 drawHelp :: AppState -> Widget Name
