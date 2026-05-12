@@ -97,6 +97,7 @@ data DrillState = DrillState
     , dsTotalCount :: Int                 -- Running total count
     , dsMode :: DrillMode                 -- Current drill mode
     , dsRevealAnswer :: Bool              -- For reading mode: reveal answer
+    , dsCardStartTime :: Maybe UTCTime   -- When current card was shown (for time tracking)
     } deriving (Show, Eq, Generic)
 
 -- | Create initial drill state
@@ -110,6 +111,7 @@ initialDrillState mode exercises = DrillState
     , dsTotalCount = 0
     , dsMode = mode
     , dsRevealAnswer = False
+    , dsCardStartTime = Nothing
     }
 
 -- | Statistics for typing practice
@@ -155,6 +157,7 @@ data TypingState = TypingState
     , typSelectedLevel :: Int               -- Level selection (for level select screen)
     , typLevelSelectMode :: LevelSelectMode -- Top-level or sub-level view
     , typSelectedIndex :: Int               -- Index in current level list
+    , typSessionStart :: Maybe UTCTime      -- When this typing session began (for WPM/time)
     } deriving (Show, Eq, Generic)
 
 -- | Create initial typing state
@@ -174,6 +177,7 @@ initialTypingState level exType prompts words = TypingState
     , typSelectedLevel = 1
     , typLevelSelectMode = TopLevelSelect
     , typSelectedIndex = 0
+    , typSessionStart = Nothing
     }
 
 -- | Session statistics for today's practice

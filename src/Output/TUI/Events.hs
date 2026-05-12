@@ -10,7 +10,7 @@ import Data.Char (digitToInt)
 import Brick
 import qualified Graphics.Vty as V
 import qualified Data.Text as T
-import Data.Time (getCurrentTime, utcToLocalTime, utc, localDay)
+import Data.Time (getCurrentTime, utcToLocalTime, utc, localDay, diffUTCTime)
 import qualified Data.Map as Map
 
 import Output.TUI.Types
@@ -115,8 +115,9 @@ startDrill mode = do
             if null selectedCards
                 then modify $ \st -> st { asMessage = Just "No cards due for review!" }
                 else do
+                    utcNow <- liftIO getCurrentTime
                     let prompts = map (generateExercisePrompt exType) selectedCards
-                        drill = initialDrillState mode prompts
+                        drill = (initialDrillState mode prompts) { dsCardStartTime = Just utcNow }
                     modify $ \st -> st
                         { asScreen = DrillScreen
                         , asDrill = Just drill
@@ -133,8 +134,9 @@ startDueCardReview = do
     if null dueCards
         then modify $ \st -> st { asMessage = Just "No cards due — great work! Check back later." }
         else do
+            utcNow <- liftIO getCurrentTime
             let prompts = map (generateExercisePrompt Reading) dueCards
-                drill   = initialDrillState ReadingMode prompts
+                drill   = (initialDrillState ReadingMode prompts) { dsCardStartTime = Just utcNow }
             modify $ \st -> st
                 { asScreen = DrillScreen
                 , asDrill  = Just drill
@@ -209,10 +211,14 @@ submitAnswer = do
         Just drill -> do
             let idx = dsCurrentIndex drill
             when (idx < length (dsExercises drill)) $ do
+                utcNow <- liftIO getCurrentTime
                 let prompt = dsExercises drill !! idx
                     isCorrect = checkAnswer prompt (dsUserInput drill)
                     vocabId' = epVocabId prompt
                     exType = epExerciseType prompt
+                    cardTime = case dsCardStartTime drill of
+                        Nothing    -> 0
+                        Just start -> round (diffUTCTime utcNow start)
 
                 -- Update drill state
                 modify $ \st -> st
@@ -225,7 +231,7 @@ submitAnswer = do
 
                 -- Update SRS state
                 let quality = if isCorrect then Good else Again
-                updateCardSRS vocabId' quality exType
+                updateCardSRS vocabId' quality exType cardTime
 
 -- | Record result and advance to next exercise (for reading mode)
 recordAndAdvance :: Quality -> EventM Name AppState ()
@@ -236,11 +242,15 @@ recordAndAdvance quality = do
         Just drill -> do
             let idx = dsCurrentIndex drill
             when (idx < length (dsExercises drill)) $ do
+                utcNow <- liftIO getCurrentTime
                 let prompt = dsExercises drill !! idx
                     vocabId' = epVocabId prompt
                     exType = epExerciseType prompt
+                    cardTime = case dsCardStartTime drill of
+                        Nothing    -> 0
+                        Just start -> round (diffUTCTime utcNow start)
                 -- Update SRS state
-                updateCardSRS vocabId' quality exType
+                updateCardSRS vocabId' quality exType cardTime
 
             let newDrill = drill
                     { dsCorrectCount = if quality >= Good then dsCorrectCount drill + 1 else dsCorrectCount drill
@@ -259,14 +269,17 @@ advanceDrill = do
             let newIdx = dsCurrentIndex drill + 1
             if newIdx >= length (dsExercises drill)
                 then endDrill
-                else modify $ \st -> st
-                    { asDrill = Just $ drill
-                        { dsCurrentIndex = newIdx
-                        , dsUserInput = ""
-                        , dsShowResult = Nothing
-                        , dsRevealAnswer = False
+                else do
+                    utcNow <- liftIO getCurrentTime
+                    modify $ \st -> st
+                        { asDrill = Just $ drill
+                            { dsCurrentIndex = newIdx
+                            , dsUserInput = ""
+                            , dsShowResult = Nothing
+                            , dsRevealAnswer = False
+                            , dsCardStartTime = Just utcNow
+                            }
                         }
-                    }
 
 -- | End drill session and return to menu
 endDrill :: EventM Name AppState ()
@@ -290,8 +303,8 @@ endDrill = do
 -- 3. Update asVocabStates in memory
 -- 4. Persist via runJsonRepository
 -- 5. Log the activity
-updateCardSRS :: VocabularyId -> Quality -> ExerciseType -> EventM Name AppState ()
-updateCardSRS vocabId' quality exType = do
+updateCardSRS :: VocabularyId -> Quality -> ExerciseType -> Int -> EventM Name AppState ()
+updateCardSRS vocabId' quality exType timeSpent = do
     s <- get
 
     -- Get current time
@@ -326,7 +339,7 @@ updateCardSRS vocabId' quality exType = do
     -- Log activity
     let performance = Performance
             { perfAccuracy = Percentage (if quality >= Good then 100 else 0)
-            , perfTimeSpent = 0  -- TODO: track actual time
+            , perfTimeSpent = timeSpent
             , perfWpm = Nothing
             }
         activity = ActivityEntry
@@ -534,6 +547,7 @@ startLevelSession level ts = do
     if null levelWords
         then modify $ \st -> st { asMessage = Just $ "No words for level " <> tlName level }
         else do
+            utcNow <- liftIO getCurrentTime
             let prompts = createSessionPrompts Echo (take 20 levelWords)
                 newTs = ts
                     { typLevel = level
@@ -543,6 +557,7 @@ startLevelSession level ts = do
                     , typCharStatuses = []
                     , typStartTime = Nothing
                     , typStats = emptyTypingStats
+                    , typSessionStart = Just utcNow
                     }
             modify $ \st -> st
                 { asScreen = TypingPracticeScreen
@@ -711,10 +726,16 @@ endTypingPractice = do
 
             -- Log activity so typing sessions count toward the streak
             when completedEnough $ do
-                let performance = Performance
+                let elapsedSeconds = case typSessionStart ts of
+                        Nothing    -> 0 :: Double
+                        Just start -> realToFrac (diffUTCTime utcNow start)
+                    wpm = if elapsedSeconds > 0
+                            then round ((fromIntegral (tsWordsCompleted stats) / elapsedSeconds) * 60 :: Double)
+                            else (0 :: Int)
+                    performance = Performance
                         { perfAccuracy  = Percentage accuracy
-                        , perfTimeSpent = 0
-                        , perfWpm       = Nothing
+                        , perfTimeSpent = round elapsedSeconds
+                        , perfWpm       = if wpm > 0 then Just wpm else Nothing
                         }
                     activity = ActivityEntry
                         { actDate         = now
