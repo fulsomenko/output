@@ -146,7 +146,10 @@ drawExercise drill = case currentExercise of
         [ withAttr promptAttr $ txt $ promptLabel (dsMode drill)
         , padTop (Pad 1) $ txtWrap $ epQuestion prompt
         , if dsRevealAnswer drill
-            then padTop (Pad 1) $ withAttr hintAttr $ txt $ "Answer: " <> epExpectedAnswer prompt
+            then padTop (Pad 1) $ vBox
+                [ withAttr hintAttr $ txt $ "Answer: " <> epExpectedAnswer prompt
+                , exampleBlock prompt
+                ]
             else emptyWidget
         ]
   where
@@ -156,6 +159,18 @@ drawExercise drill = case currentExercise of
     promptLabel WritingMode = "Translate to Korean:"
     promptLabel ReadingMode = "What does this mean?"
     promptLabel TypingMode  = "Type this in Korean:"
+    exampleBlock prompt
+        | dsMode drill /= ReadingMode      = emptyWidget
+        | null (epExampleSentences prompt) = emptyWidget
+        | otherwise = padTop (Pad 1) $ vBox $
+            (withAttr promptAttr $ txt "Example:")
+            : zipWith renderExample
+                (epExampleSentences prompt)
+                (epExampleTranslations prompt ++ repeat "")
+    renderExample ko en = padLeft (Pad 2) $ vBox
+        [ txt ko
+        , withAttr hintAttr $ txt en
+        ]
 
 -- | Draw input field
 drawInput :: DrillState -> Widget Name

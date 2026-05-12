@@ -25,10 +25,12 @@ import Output.Domain.Types
 data ExercisePrompt = ExercisePrompt
     { epVocabId :: VocabularyId
     , epExerciseType :: ExerciseType
-    , epQuestion :: Text          -- What to show the user
-    , epExpectedAnswer :: Text    -- The correct answer
-    , epHint :: Maybe Text        -- Optional hint
-    , epAlternatives :: [Text]    -- Alternative correct answers
+    , epQuestion :: Text                  -- What to show the user
+    , epExpectedAnswer :: Text            -- The correct answer
+    , epHint :: Maybe Text                -- Optional hint
+    , epAlternatives :: [Text]            -- Alternative correct answers
+    , epExampleSentences :: [Text]        -- Example Korean sentences using this word
+    , epExampleTranslations :: [Text]     -- Parallel English translations
     } deriving (Show, Eq, Generic)
 
 instance FromJSON ExercisePrompt
@@ -58,6 +60,8 @@ generateExercisePrompt exType card = case exType of
         , epExpectedAnswer = primaryEnglish  -- User thinks of English
         , epHint = Just $ romanization card
         , epAlternatives = english card
+        , epExampleSentences = exampleSentences card
+        , epExampleTranslations = exampleTranslations card
         }
     Writing -> ExercisePrompt
         { epVocabId = vocabId card
@@ -66,6 +70,8 @@ generateExercisePrompt exType card = case exType of
         , epExpectedAnswer = korean card  -- User writes Korean
         , epHint = Just $ romanization card
         , epAlternatives = []
+        , epExampleSentences = exampleSentences card
+        , epExampleTranslations = exampleTranslations card
         }
     Typing -> ExercisePrompt
         { epVocabId = vocabId card
@@ -74,6 +80,8 @@ generateExercisePrompt exType card = case exType of
         , epExpectedAnswer = korean card  -- User types Korean
         , epHint = Nothing
         , epAlternatives = []
+        , epExampleSentences = exampleSentences card
+        , epExampleTranslations = exampleTranslations card
         }
   where
     primaryEnglish = case english card of
