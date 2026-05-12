@@ -60,22 +60,23 @@ handleMenuEvent (VtyEvent (V.EvKey V.KUp [])) =
 handleMenuEvent (VtyEvent (V.EvKey (V.KChar 'k') [])) =
     modify $ \s -> s { asMenuIndex = max 0 (asMenuIndex s - 1) }
 handleMenuEvent (VtyEvent (V.EvKey V.KDown [])) =
-    modify $ \s -> s { asMenuIndex = min 7 (asMenuIndex s + 1) }
+    modify $ \s -> s { asMenuIndex = min 8 (asMenuIndex s + 1) }
 handleMenuEvent (VtyEvent (V.EvKey (V.KChar 'j') [])) =
-    modify $ \s -> s { asMenuIndex = min 7 (asMenuIndex s + 1) }
+    modify $ \s -> s { asMenuIndex = min 8 (asMenuIndex s + 1) }
 handleMenuEvent (VtyEvent (V.EvKey V.KEnter [])) = do
     s <- get
     case asMenuIndex s of
-        0 -> startTypingPractice     -- Learn keyboard with levels (start here!)
-        1 -> startDrill TypingMode   -- Typing drill
-        2 -> startDrill ReadingMode  -- Reading drill
-        3 -> startDrill WritingMode  -- Writing drill (most advanced)
-        4 -> modify $ \st -> st { asScreen = ProgressScreen }
-        5 -> do
+        0 -> startTypingPractice
+        1 -> startDueCardReview
+        2 -> startDrill TypingMode
+        3 -> startDrill ReadingMode
+        4 -> startDrill WritingMode
+        5 -> modify $ \st -> st { asScreen = ProgressScreen }
+        6 -> do
             freshActivities <- liftIO $ runJsonRepository getAllActivities
             modify $ \st -> st { asScreen = StatsScreen, asActivities = freshActivities, asStatsSelectedDay = 0 }
-        6 -> modify $ \st -> st { asScreen = HelpScreen }
-        7 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
+        7 -> modify $ \st -> st { asScreen = HelpScreen }
+        8 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
         _ -> pure ()
 handleMenuEvent (VtyEvent (V.EvKey (V.KChar '?') [])) =
     modify $ \s -> s { asScreen = HelpScreen }
@@ -121,6 +122,24 @@ startDrill mode = do
                         , asDrill = Just drill
                         , asMessage = Nothing
                         }
+
+-- | Start a review session for all cards currently due in the SRS queue
+startDueCardReview :: EventM Name AppState ()
+startDueCardReview = do
+    s <- get
+    let dueIds  = asDueCards s
+        cardMap = Map.fromList [(vocabId c, c) | c <- asVocabCards s]
+        dueCards = [c | vid <- dueIds, Just c <- [Map.lookup vid cardMap]]
+    if null dueCards
+        then modify $ \st -> st { asMessage = Just "No cards due — great work! Check back later." }
+        else do
+            let prompts = map (generateExercisePrompt Reading) dueCards
+                drill   = initialDrillState ReadingMode prompts
+            modify $ \st -> st
+                { asScreen = DrillScreen
+                , asDrill  = Just drill
+                , asMessage = Nothing
+                }
 
 -- | Handle drill events
 handleDrillEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()

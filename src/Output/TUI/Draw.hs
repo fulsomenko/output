@@ -76,8 +76,11 @@ drawMainMenu s =
 drawMenuItems :: AppState -> Widget Name
 drawMenuItems s = vBox $ zipWith (drawMenuItem (asMenuIndex s)) [0..] menuOptions
   where
+    dueCount = length (asDueCards s)
+    dueLabel = "Review Due Cards (" <> T.pack (show dueCount) <> ")"
     menuOptions =
         [ ("Typing Practice", "Learn Korean keyboard with guided levels")
+        , (dueLabel,          "Practice words due for SRS review")
         , ("Typing Drill",    "Practice typing Korean words")
         , ("Reading Drill",   "Read Korean and self-grade")
         , ("Writing Drill",   "Translate English to Korean")
