@@ -26,6 +26,7 @@ import Control.Monad
 
 import Output.Domain.Types
     ( VocabularyId(..)
+    , WordClass(..)
     , VocabularyCard(..)
     , VocabularyState(..)
     , UserProgress
@@ -246,12 +247,13 @@ saveLearnedWord level ew = do
                 maxId     = foldr max 100000 existingIds
                 nextId    = VocabularyId (maxId + 1)
                 newCard   = VocabularyCard
-                    { vocabId            = nextId
-                    , korean             = ewKorean ew
-                    , romanization       = ""
-                    , english            = [ewTranslation ew]
-                    , topicLevel         = level
-                    , exampleSentences   = [ewContext ew]
+                    { vocabId             = nextId
+                    , wordClass           = ewWordClass ew
+                    , korean              = ewKorean ew
+                    , romanization        = ""
+                    , english             = [ewTranslation ew]
+                    , topicLevel          = level
+                    , exampleSentences    = [ewContext ew]
                     , exampleTranslations = []
                     }
             createDirectoryIfMissing True "data/user-data"
