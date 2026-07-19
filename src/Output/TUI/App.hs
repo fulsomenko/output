@@ -17,7 +17,7 @@ import System.Environment (lookupEnv)
 import Output.TUI.Types
 import Output.TUI.Draw (drawUI)
 import Output.TUI.Events (handleEvent)
-import Output.Repository.Json (runJsonRepository, loadSettings, loadLearnedWords)
+import Output.Repository.Json (runJsonRepository, loadSettings, loadLearnedWords, loadStudentProfile)
 import Output.Domain.Settings (AppSettings(..))
 import Output.Repository.Class
     ( getAllVocabCards
@@ -76,30 +76,32 @@ runTUI = do
     let now = utcToLocalTime utc utcNow
 
     -- Load all persisted data
-    topikCards    <- runJsonRepository getAllVocabCards
-    learnedCards  <- loadLearnedWords
+    topikCards     <- runJsonRepository getAllVocabCards
+    learnedCards   <- loadLearnedWords
     let cards = topikCards ++ learnedCards
-    progress      <- runJsonRepository getProgress
-    typingWords   <- loadAllTypingWords "data"
+    progress       <- runJsonRepository getProgress
+    typingWords    <- loadAllTypingWords "data"
     typingProgress <- runJsonRepository getTypingProgress
-    vocabStates   <- runJsonRepository getAllVocabStates
-    activities    <- runJsonRepository getAllActivities
-    settings      <- loadSettings >>= applyEnvOverrides
+    vocabStates    <- runJsonRepository getAllVocabStates
+    activities     <- runJsonRepository getAllActivities
+    settings       <- loadSettings >>= applyEnvOverrides
+    studentProfile <- loadStudentProfile
 
     let dueCards = Map.keys $ Map.filter isDue vocabStates
         isDue state = vstNextReviewDate state <= now
         streak = calculateStreak now activities
 
     let initialState = initialAppState
-            { asVocabCards    = cards
-            , asProgress      = Just progress
-            , asTypingWords   = typingWords
+            { asVocabCards     = cards
+            , asProgress       = Just progress
+            , asTypingWords    = typingWords
             , asTypingProgress = typingProgress
-            , asVocabStates   = vocabStates
-            , asDueCards      = dueCards
-            , asDailyStreak   = streak
-            , asActivities    = activities
-            , asSettings      = settings
+            , asVocabStates    = vocabStates
+            , asDueCards       = dueCards
+            , asDailyStreak    = streak
+            , asActivities     = activities
+            , asSettings       = settings
+            , asStudentProfile = studentProfile
             }
 
     let buildVty = VCross.mkVty V.defaultConfig

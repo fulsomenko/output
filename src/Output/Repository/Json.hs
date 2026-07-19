@@ -11,6 +11,8 @@ module Output.Repository.Json
     , saveSettings
     , loadLearnedWords
     , saveLearnedWord
+    , loadStudentProfile
+    , saveStudentProfile
     ) where
 
 import Data.Aeson (decode, encode, FromJSON, ToJSON)
@@ -37,6 +39,7 @@ import Output.Domain.Types
 import Output.Domain.Activity (ActivityEntry(..))
 import Output.Domain.Progress (emptyUserProgress)
 import Output.Domain.Settings (AppSettings, defaultSettings)
+import Output.Domain.StudentProfile (StudentProfile)
 import Output.LLM.Extractor (ExtractedWord(..))
 import Output.Repository.Class
     ( ActivityRepository(..)
@@ -233,6 +236,23 @@ loadLearnedWords = do
         else do
             content <- BL.readFile filePath
             pure $ maybe [] id (decode content)
+
+-- | Load the cumulative student profile from disk (Nothing if not yet created).
+loadStudentProfile :: IO (Maybe StudentProfile)
+loadStudentProfile = do
+    let filePath = "data/user-data/student-profile.json"
+    exists <- doesFileExist filePath
+    if not exists
+        then pure Nothing
+        else do
+            content <- BL.readFile filePath
+            pure (decode content)
+
+-- | Persist the updated student profile to disk.
+saveStudentProfile :: StudentProfile -> IO ()
+saveStudentProfile profile = do
+    createDirectoryIfMissing True "data/user-data"
+    BL.writeFile "data/user-data/student-profile.json" (encode profile)
 
 -- | Persist a new AI-extracted word, assigning it an ID and deduplicating.
 -- Returns the saved card (with assigned ID), or Nothing if the word already exists.

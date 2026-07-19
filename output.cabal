@@ -29,6 +29,7 @@ library
         Output.Domain.TypingWord
         Output.Domain.TypingExercise
         Output.Domain.Settings
+        Output.Domain.StudentProfile
         Output.Repository.Class
         Output.Repository.Json
         Output.Repository.Memory
@@ -40,6 +41,7 @@ library
         Output.LLM.Persona
         Output.LLM.Agent
         Output.LLM.Extractor
+        Output.LLM.Summarizer
         Output.CLI
         Output.App
         Output.TUI.Types

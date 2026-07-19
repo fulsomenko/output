@@ -12,6 +12,7 @@ import Data.Maybe (fromMaybe, isJust)
 import Brick
 import Brick.BChan (BChan, writeBChan)
 import qualified Graphics.Vty as V
+import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time (getCurrentTime, utcToLocalTime, utc, localDay, diffUTCTime)
 import qualified Data.Map as Map
@@ -24,6 +25,7 @@ import Output.Domain.Types
     , VocabularyId
     , VocabularyCard(..)
     , VocabularyState(..)
+    , MasteryLevel(..)
     , newVocabularyState
     , TOPIK_Level(..)
     )
@@ -33,34 +35,71 @@ import Output.Domain.TypingWord (TypingWord(..))
 import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), createSessionPrompts, validateTyping, CharStatus(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
 import Output.Domain.Settings (AppSettings(..), Language(..), showLanguage)
-import Output.Repository.Json (runJsonRepository, saveSettings, saveLearnedWord)
+import Output.Repository.Json
+    ( runJsonRepository, saveSettings, saveLearnedWord
+    , loadStudentProfile, saveStudentProfile
+    )
 import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity, getAllActivities)
 import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..), ratingToQuality)
 import Output.Algorithm.SpacedRepetition (defaultSM2, applySRSResult)
 import Output.LLM.Client (callOllama, ollamaFromSettings, OllamaMessage(..))
 import Output.LLM.Agent (AgentTask(..), agentSystemPrompt, parseAssessmentLevel)
 import Output.LLM.Persona (Persona(..))
-import Output.LLM.Extractor (extractVocabFromConversation, isSpokenOccasion)
+import Output.LLM.Extractor (ExtractedWord(..), extractVocabFromConversation, isSpokenOccasion)
+import Output.LLM.Summarizer (summarizeSession)
+import Output.Domain.StudentProfile (StudentProfile(..))
 import qualified Data.Set as Set
 
 -- | Main event handler. The BChan is threaded through so LLM handlers
 -- can fork async calls and deliver results back to the app.
+-- Async background events (LLMSummary, LLMExtraction) are handled here
+-- unconditionally — they may arrive after the user has left the chat screen.
 handleEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
+handleEvent _ (AppEvent (LLMSummary summary))      = handleSummaryEvent summary
+handleEvent _ (AppEvent (LLMExtraction extracted)) = handleExtractionEvent extracted
 handleEvent chan ev = do
     s <- get
     case asScreen s of
-        MainMenuScreen      -> handleMenuEvent chan ev
-        DrillScreen         -> handleDrillEvent ev
+        MainMenuScreen          -> handleMenuEvent chan ev
+        DrillScreen             -> handleDrillEvent ev
         TypingPracticeScreen    -> handleTypingEvent ev
         TypingLevelSelectScreen -> handleLevelSelectEvent ev
-        ProgressScreen      -> handleProgressEvent ev
-        StatsScreen         -> handleStatsEvent ev
-        DayDetailScreen     -> handleDayDetailEvent ev
-        HelpScreen          -> handleHelpEvent ev
-        QuitConfirmScreen   -> handleQuitEvent ev
-        LLMChatScreen       -> handleLLMChatEvent chan ev
-        SettingsScreen      -> handleSettingsEvent ev
-        PersonaScreen       -> handlePersonaEvent ev
+        ProgressScreen          -> handleProgressEvent ev
+        StatsScreen             -> handleStatsEvent ev
+        DayDetailScreen         -> handleDayDetailEvent ev
+        HelpScreen              -> handleHelpEvent ev
+        QuitConfirmScreen       -> handleQuitEvent ev
+        LLMChatScreen           -> handleLLMChatEvent chan ev
+        SettingsScreen          -> handleSettingsEvent ev
+        PersonaScreen           -> handlePersonaEvent ev
+
+-- | Persist and store an incoming session summary produced by the summarizer agent.
+handleSummaryEvent :: Text -> EventM Name AppState ()
+handleSummaryEvent summary = do
+    now <- liftIO getCurrentTime
+    let localNow = utcToLocalTime utc now
+        profile  = StudentProfile { spSummary = summary, spLastUpdated = localNow }
+    liftIO $ saveStudentProfile profile
+    modify $ \st -> st { asStudentProfile = Just profile }
+
+-- | Handle vocabulary words extracted from a lesson (screen-independent).
+handleExtractionEvent :: [ExtractedWord] -> EventM Name AppState ()
+handleExtractionEvent extracted = do
+    s <- get
+    let level = maybe One intToLevel (settingsKoreanLevel (asSettings s))
+    newCards <- liftIO $ mapM (saveLearnedWord level) extracted
+    now <- liftIO getCurrentTime
+    let localNow = utcToLocalTime utc now
+        saved    = [c | Just c <- newCards]
+    when (not $ null saved) $ do
+        let newVocabCards  = asVocabCards s ++ saved
+            initialStates  = map (\c -> (vocabId c, newVocabularyState (vocabId c) localNow)) saved
+            newVocabStates = foldr (\(vid, vs) m -> Map.insert vid vs m)
+                                   (asVocabStates s) initialStates
+        modify $ \st -> st
+            { asVocabCards  = newVocabCards
+            , asVocabStates = newVocabStates
+            }
 
 -- | Handle menu events
 handleMenuEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
@@ -324,6 +363,38 @@ endDrill = do
 -- AI Lesson handlers
 -- ---------------------------------------------------------------------------
 
+-- | Build a student brief from the current AppState.
+-- Combines quantitative stats (TOPIK level, vocabulary mastery) with the
+-- AI-generated qualitative summary stored in asStudentProfile.
+studentBrief :: AppState -> Maybe Text
+studentBrief s
+    | statsEmpty && profileEmpty = Nothing
+    | otherwise                  = Just (T.unlines $ statsLines ++ profileLines)
+  where
+    settings = asSettings s
+    states   = Map.elems (asVocabStates s)
+    total    = length (asVocabCards s)
+    nMastered      = length [v | v <- states, vstMasteryLevel v == Mastered]
+    nIntermediate  = length [v | v <- states, vstMasteryLevel v == Intermediate]
+    nLearning      = length [v | v <- states, vstMasteryLevel v == Learning]
+    nNew           = length [v | v <- states, vstMasteryLevel v == New]
+    levelStr = maybe "Not yet assessed"
+                     (\l -> "TOPIK " <> T.pack (show l))
+                     (settingsKoreanLevel settings)
+    statsEmpty   = total == 0 && settingsKoreanLevel settings == Nothing
+    profileEmpty = null (asStudentProfile s)
+    statsLines =
+        [ "TOPIK Level: " <> levelStr
+        , "Vocabulary:   " <> T.pack (show total) <> " words"
+            <> "  (" <> T.pack (show nMastered)     <> " Mastered"
+            <> " · " <> T.pack (show nIntermediate) <> " Intermediate"
+            <> " · " <> T.pack (show nLearning)     <> " Learning"
+            <> " · " <> T.pack (show nNew)           <> " New)"
+        ]
+    profileLines = case asStudentProfile s of
+        Nothing -> []
+        Just p  -> ["", spSummary p]
+
 -- | Open an AI lesson chat. Kicks off the AI's opening message immediately.
 startLLMLesson :: BChan AppEvent -> AgentTask -> EventM Name AppState ()
 startLLMLesson chan task = do
@@ -333,7 +404,8 @@ startLLMLesson chan task = do
         persona   = Persona { personaName  = settingsPersonaName  settings
                             , personaStyle = settingsPersonaStyle settings }
         chat      = initialLLMChatState task persona
-        sysPrompt = agentSystemPrompt persona task (settingsLanguage settings) level
+        brief     = studentBrief s
+        sysPrompt = agentSystemPrompt persona task (settingsLanguage settings) level brief
         cfg       = ollamaFromSettings settings
     put s { asScreen = LLMChatScreen, asLLMChat = Just chat, asMessage = Nothing }
     liftIO $ void $ forkIO $ do
@@ -378,23 +450,6 @@ handleLLMChatEvent chan (AppEvent (LLMResponse result)) = do
                     case extracted of
                         Right ws | not (null ws) -> writeBChan chan (LLMExtraction ws)
                         _                        -> pure ()
--- Extracted vocabulary arrived from background extraction agent
-handleLLMChatEvent _ (AppEvent (LLMExtraction extracted)) = do
-    s <- get
-    let level = maybe One intToLevel (settingsKoreanLevel (asSettings s))
-    newCards <- liftIO $ mapM (saveLearnedWord level) extracted
-    now <- liftIO getCurrentTime
-    let localNow  = utcToLocalTime utc now
-        saved     = [c | Just c <- newCards]
-    when (not $ null saved) $ do
-        let newVocabCards  = asVocabCards s ++ saved
-            initialStates  = map (\c -> (vocabId c, newVocabularyState (vocabId c) localNow)) saved
-            newVocabStates = foldr (\(vid, vs) m -> Map.insert vid vs m)
-                                   (asVocabStates s) initialStates
-        modify $ \st -> st
-            { asVocabCards  = newVocabCards
-            , asVocabStates = newVocabStates
-            }
 -- Route key events by input mode
 handleLLMChatEvent chan ev = do
     s <- get
@@ -407,8 +462,23 @@ handleLLMChatEvent chan ev = do
 -- | Normal mode: navigation, send, mode switch, keyboard toggle.
 handleChatNormal :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
 handleChatNormal chan (VtyEvent (V.EvKey V.KEnter [])) = sendChatMessage chan
-handleChatNormal _ (VtyEvent (V.EvKey V.KEsc [])) =
-    modify $ \s -> s { asScreen = MainMenuScreen, asLLMChat = Nothing }
+handleChatNormal chan (VtyEvent (V.EvKey V.KEsc [])) = do
+    s <- get
+    case asLLMChat s of
+        Just chat | not (null (llmMessages chat)) -> do
+            let settings = asSettings s
+                cfg      = ollamaFromSettings settings
+                lang     = settingsLanguage settings
+                mProfile = asStudentProfile s
+                oMsgs    = map (\m -> OllamaMessage (llmRole m) (llmContent m))
+                               (llmMessages chat)
+            liftIO $ void $ forkIO $ do
+                result <- summarizeSession cfg lang oMsgs mProfile
+                case result of
+                    Right summary -> writeBChan chan (LLMSummary summary)
+                    Left _        -> pure ()
+        _ -> pure ()
+    modify $ \st -> st { asScreen = MainMenuScreen, asLLMChat = Nothing }
 handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'i') [])) =
     modify $ \s -> case asLLMChat s of
         Nothing -> s
@@ -463,8 +533,9 @@ sendChatMessage chan = do
                         newMsgs   = llmMessages chat ++ [userMsg]
                         settings  = asSettings s
                         level     = fromMaybe 1 (settingsKoreanLevel settings)
+                        brief     = studentBrief s
                         sysPrompt = agentSystemPrompt (llmPersona chat) (llmTask chat)
-                                        (settingsLanguage settings) level
+                                        (settingsLanguage settings) level brief
                         cfg       = ollamaFromSettings settings
                         oMsgs     = map (\m -> OllamaMessage (llmRole m) (llmContent m)) newMsgs
                     modify $ \st -> st

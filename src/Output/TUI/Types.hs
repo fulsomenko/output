@@ -64,6 +64,7 @@ import Output.Domain.Settings (AppSettings, defaultSettings)
 import Output.LLM.Agent (AgentTask(..))
 import Output.LLM.Persona (Persona)
 import Output.LLM.Extractor (ExtractedWord)
+import Output.Domain.StudentProfile (StudentProfile)
 
 -- | Widget names for focus management
 data Name
@@ -254,6 +255,7 @@ data AppEvent
     = Tick
     | LLMResponse   (Either Text Text)    -- Async reply from lesson AI
     | LLMExtraction [ExtractedWord]       -- Vocabulary extracted from last turn
+    | LLMSummary    Text                  -- Session summary from summarization agent
     deriving (Show, Eq)
 
 -- | Main application state
@@ -275,9 +277,10 @@ data AppState = AppState
     , asActivities :: [ActivityEntry]       -- Full activity log
     , asStatsSelectedDay :: Int             -- Selected day index in stats screen
     -- LLM / AI lessons
-    , asLLMChat    :: Maybe LLMChatState       -- Active AI lesson chat
-    , asSettings   :: AppSettings              -- Language, level, Ollama config
-    , asPersonaEdit :: Maybe (PersonaEditField, Text)  -- Active persona field edit
+    , asLLMChat       :: Maybe LLMChatState             -- Active AI lesson chat
+    , asSettings      :: AppSettings                    -- Language, level, Ollama config
+    , asPersonaEdit   :: Maybe (PersonaEditField, Text) -- Active persona field edit
+    , asStudentProfile :: Maybe StudentProfile          -- Cumulative student brief
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -300,9 +303,10 @@ initialAppState = AppState
     , asActivities = []
     , asStatsSelectedDay = 0
     -- LLM defaults
-    , asLLMChat     = Nothing
-    , asSettings    = defaultSettings
-    , asPersonaEdit = Nothing
+    , asLLMChat        = Nothing
+    , asSettings       = defaultSettings
+    , asPersonaEdit    = Nothing
+    , asStudentProfile = Nothing
     }
 
 -- | Attribute names for styling

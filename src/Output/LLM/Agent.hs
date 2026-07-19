@@ -45,13 +45,17 @@ taskMenuDesc GenerateSentences  = "AI generates practice sentences"
 taskMenuDesc TeachGrammar       = "AI explains a Korean grammar point"
 
 -- | Generate the system prompt for a given persona, task, language, and level.
--- This is the core of the agent: it shapes how the AI behaves in each lesson.
-agentSystemPrompt :: Persona -> AgentTask -> Language -> Int -> Text
-agentSystemPrompt persona task lang level = T.unlines $
-    personaHeader : "" : taskInstructions
+-- mBrief is a pre-computed student brief (quantitative stats + AI summary) that
+-- is prepended so the teacher persona has full context on the student.
+agentSystemPrompt :: Persona -> AgentTask -> Language -> Int -> Maybe Text -> Text
+agentSystemPrompt persona task lang level mBrief = T.unlines $
+    personaHeader : "" : briefBlock ++ taskInstructions
   where
     personaHeader = "You are " <> personaName persona
         <> ", a " <> personaStyle persona <> " Korean language teacher."
+    briefBlock = case mBrief of
+        Nothing    -> []
+        Just brief -> ["=== Student Profile ===", brief, "=======================", ""]
     langName = showLanguage lang
     levelStr = T.pack (show level)
 
