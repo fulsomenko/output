@@ -20,6 +20,7 @@ module Output.TUI.Types
     , SessionStats(..)
     , emptySessionStats
       -- * LLM Chat
+    , InputMode(..)
     , LLMMessage(..)
     , LLMChatState(..)
     , initialLLMChatState
@@ -218,23 +219,31 @@ data LLMMessage = LLMMessage
 
 -- | State for an active LLM chat session.
 data LLMChatState = LLMChatState
-    { llmTask     :: AgentTask
-    , llmPersona  :: Persona
-    , llmMessages :: [LLMMessage]
-    , llmInput    :: Text
-    , llmWaiting  :: Bool         -- True while waiting for Ollama
-    , llmError    :: Maybe Text   -- Last error from Ollama, if any
+    { llmTask         :: AgentTask
+    , llmPersona      :: Persona
+    , llmMessages     :: [LLMMessage]
+    , llmInput        :: Text
+    , llmWaiting      :: Bool         -- True while waiting for Ollama
+    , llmError        :: Maybe Text   -- Last error from Ollama, if any
+    , llmInputMode    :: InputMode    -- Normal (navigate) or Insert (type)
+    , llmShowKeyboard :: Bool         -- Whether to show the keyboard reference
     } deriving (Show, Eq, Generic)
 
 initialLLMChatState :: AgentTask -> Persona -> LLMChatState
 initialLLMChatState task persona = LLMChatState
-    { llmTask     = task
-    , llmPersona  = persona
-    , llmMessages = []
-    , llmInput    = ""
-    , llmWaiting  = True    -- AI sends the opening message immediately
-    , llmError    = Nothing
+    { llmTask         = task
+    , llmPersona      = persona
+    , llmMessages     = []
+    , llmInput        = ""
+    , llmWaiting      = True    -- AI sends the opening message immediately
+    , llmError        = Nothing
+    , llmInputMode    = NormalMode
+    , llmShowKeyboard = True
     }
+
+-- | Vim-style input mode for the chat screen.
+data InputMode = NormalMode | InsertMode
+    deriving (Show, Eq, Generic)
 
 -- | Which persona field is being edited on the persona screen.
 data PersonaEditField = PersonaEditName | PersonaEditStyle

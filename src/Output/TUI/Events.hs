@@ -39,7 +39,7 @@ import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..), ratingToQuality)
 import Output.Algorithm.SpacedRepetition (defaultSM2, applySRSResult)
 import Output.LLM.Client (callOllama, ollamaFromSettings, OllamaMessage(..))
 import Output.LLM.Agent (AgentTask(..), agentSystemPrompt, parseAssessmentLevel)
-import Output.LLM.Persona (Persona(..), teacherKim)
+import Output.LLM.Persona (Persona(..))
 import Output.LLM.Extractor (extractVocabFromConversation, isSpokenOccasion)
 import qualified Data.Set as Set
 
@@ -342,6 +342,7 @@ startLLMLesson chan task = do
         writeBChan chan (LLMResponse result)
 
 -- | Handle events on the LLM chat screen.
+-- Async events are mode-independent; key events are routed by llmInputMode.
 handleLLMChatEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
 -- Async response arrived from the background thread
 handleLLMChatEvent chan (AppEvent (LLMResponse result)) = do
@@ -368,21 +369,20 @@ handleLLMChatEvent chan (AppEvent (LLMResponse result)) = do
                     , asSettings = newSettings
                     }
                 vScrollToEnd (viewportScroll ChatHistoryViewport)
-                -- Fork vocabulary extraction from the last exchange
                 let settings = asSettings s
                     cfg      = ollamaFromSettings settings
                     lang     = settingsLanguage settings
                     oMsgs    = map (\m -> OllamaMessage (llmRole m) (llmContent m)) newMsgs
                 liftIO $ void $ forkIO $ do
-                    words <- extractVocabFromConversation cfg lang oMsgs
-                    case words of
+                    extracted <- extractVocabFromConversation cfg lang oMsgs
+                    case extracted of
                         Right ws | not (null ws) -> writeBChan chan (LLMExtraction ws)
                         _                        -> pure ()
 -- Extracted vocabulary arrived from background extraction agent
-handleLLMChatEvent _ (AppEvent (LLMExtraction words)) = do
+handleLLMChatEvent _ (AppEvent (LLMExtraction extracted)) = do
     s <- get
     let level = maybe One intToLevel (settingsKoreanLevel (asSettings s))
-    newCards <- liftIO $ mapM (saveLearnedWord level) words
+    newCards <- liftIO $ mapM (saveLearnedWord level) extracted
     now <- liftIO getCurrentTime
     let localNow  = utcToLocalTime utc now
         saved     = [c | Just c <- newCards]
@@ -395,8 +395,61 @@ handleLLMChatEvent _ (AppEvent (LLMExtraction words)) = do
             { asVocabCards  = newVocabCards
             , asVocabStates = newVocabStates
             }
--- User submits a message
-handleLLMChatEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
+-- Route key events by input mode
+handleLLMChatEvent chan ev = do
+    s <- get
+    case asLLMChat s of
+        Nothing   -> pure ()
+        Just chat -> case llmInputMode chat of
+            NormalMode -> handleChatNormal chan ev
+            InsertMode -> handleChatInsert chan ev
+
+-- | Normal mode: navigation, send, mode switch, keyboard toggle.
+handleChatNormal :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
+handleChatNormal chan (VtyEvent (V.EvKey V.KEnter [])) = sendChatMessage chan
+handleChatNormal _ (VtyEvent (V.EvKey V.KEsc [])) =
+    modify $ \s -> s { asScreen = MainMenuScreen, asLLMChat = Nothing }
+handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'i') [])) =
+    modify $ \s -> case asLLMChat s of
+        Nothing -> s
+        Just c  -> s { asLLMChat = Just c { llmInputMode = InsertMode } }
+handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'K') [])) =
+    modify $ \s -> case asLLMChat s of
+        Nothing -> s
+        Just c  -> s { asLLMChat = Just c { llmShowKeyboard = not (llmShowKeyboard c) } }
+handleChatNormal _ (VtyEvent (V.EvKey V.KUp [])) =
+    vScrollBy (viewportScroll ChatHistoryViewport) (-1)
+handleChatNormal _ (VtyEvent (V.EvKey V.KDown [])) =
+    vScrollBy (viewportScroll ChatHistoryViewport) 1
+handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'k') [])) =
+    vScrollBy (viewportScroll ChatHistoryViewport) (-1)
+handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'j') [])) =
+    vScrollBy (viewportScroll ChatHistoryViewport) 1
+handleChatNormal _ _ = pure ()
+
+-- | Insert mode: typing, backspace, newline, return to normal.
+handleChatInsert :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
+handleChatInsert _ (VtyEvent (V.EvKey V.KEsc [])) =
+    modify $ \s -> case asLLMChat s of
+        Nothing -> s
+        Just c  -> s { asLLMChat = Just c { llmInputMode = NormalMode } }
+handleChatInsert _ (VtyEvent (V.EvKey V.KEnter [])) =
+    modify $ \s -> case asLLMChat s of
+        Nothing -> s
+        Just c  -> s { asLLMChat = Just c { llmInput = llmInput c <> "\n" } }
+handleChatInsert _ (VtyEvent (V.EvKey (V.KChar ch) [])) =
+    modify $ \s -> case asLLMChat s of
+        Nothing -> s
+        Just c  -> s { asLLMChat = Just c { llmInput = llmInput c <> T.singleton ch } }
+handleChatInsert _ (VtyEvent (V.EvKey V.KBS [])) =
+    modify $ \s -> case asLLMChat s of
+        Nothing -> s
+        Just c  -> s { asLLMChat = Just c { llmInput = T.dropEnd 1 (llmInput c) } }
+handleChatInsert _ _ = pure ()
+
+-- | Send the current input as a user message.
+sendChatMessage :: BChan AppEvent -> EventM Name AppState ()
+sendChatMessage chan = do
     s <- get
     case asLLMChat s of
         Nothing   -> pure ()
@@ -405,44 +458,27 @@ handleLLMChatEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
             in if T.null input || llmWaiting chat
                then pure ()
                else do
-                    let userMsg  = LLMMessage { llmRole = "user", llmContent = input, llmIsSpoken = False }
-                        newMsgs  = llmMessages chat ++ [userMsg]
-                        settings = asSettings s
-                        level    = fromMaybe 1 (settingsKoreanLevel settings)
+                    let userMsg   = LLMMessage { llmRole = "user", llmContent = input
+                                               , llmIsSpoken = False }
+                        newMsgs   = llmMessages chat ++ [userMsg]
+                        settings  = asSettings s
+                        level     = fromMaybe 1 (settingsKoreanLevel settings)
                         sysPrompt = agentSystemPrompt (llmPersona chat) (llmTask chat)
                                         (settingsLanguage settings) level
-                        cfg      = ollamaFromSettings settings
-                        oMsgs    = map (\m -> OllamaMessage (llmRole m) (llmContent m)) newMsgs
+                        cfg       = ollamaFromSettings settings
+                        oMsgs     = map (\m -> OllamaMessage (llmRole m) (llmContent m)) newMsgs
                     modify $ \st -> st
                         { asLLMChat = Just chat
-                            { llmMessages = newMsgs
-                            , llmInput    = ""
-                            , llmWaiting  = True
-                            , llmError    = Nothing
+                            { llmMessages  = newMsgs
+                            , llmInput     = ""
+                            , llmWaiting   = True
+                            , llmError     = Nothing
+                            , llmInputMode = NormalMode
                             }
                         }
                     liftIO $ void $ forkIO $ do
                         res <- callOllama cfg sysPrompt oMsgs
                         writeBChan chan (LLMResponse res)
--- Scroll chat history
-handleLLMChatEvent _ (VtyEvent (V.EvKey V.KUp [])) =
-    vScrollBy (viewportScroll ChatHistoryViewport) (-1)
-handleLLMChatEvent _ (VtyEvent (V.EvKey V.KDown [])) =
-    vScrollBy (viewportScroll ChatHistoryViewport) 1
--- User types a character
-handleLLMChatEvent _ (VtyEvent (V.EvKey (V.KChar c) [])) =
-    modify $ \s -> case asLLMChat s of
-        Nothing   -> s
-        Just chat -> s { asLLMChat = Just chat { llmInput = llmInput chat <> T.singleton c } }
--- Backspace
-handleLLMChatEvent _ (VtyEvent (V.EvKey V.KBS [])) =
-    modify $ \s -> case asLLMChat s of
-        Nothing   -> s
-        Just chat -> s { asLLMChat = Just chat { llmInput = T.dropEnd 1 (llmInput chat) } }
--- Esc exits
-handleLLMChatEvent _ (VtyEvent (V.EvKey V.KEsc [])) =
-    modify $ \s -> s { asScreen = MainMenuScreen, asLLMChat = Nothing }
-handleLLMChatEvent _ _ = pure ()
 
 -- | Handle settings screen events.
 handleSettingsEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()

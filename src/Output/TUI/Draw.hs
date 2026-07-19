@@ -21,7 +21,6 @@ import Output.Domain.Exercise (ExercisePrompt(..))
 import Output.Domain.Types (TypingProgress, VocabularyState(..), MasteryLevel(..), ExerciseType(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
 import Output.Domain.Settings (AppSettings(..), showLanguage)
-import Output.LLM.Agent (taskLabel)
 import Output.LLM.Persona (personaName)
 import Output.TUI.Widgets.TypingPractice
 import Output.TUI.Widgets.Keyboard (KeyboardState(..), drawKeyboard)
@@ -513,18 +512,19 @@ chatKeyboardState = KeyboardState
 drawLLMChat :: AppState -> LLMChatState -> Widget Name
 drawLLMChat s chat =
     withBorderStyle unicodeBold $
-    vBox
-        [ borderWithLabel (withAttr titleAttr $ txt title) $
+    vBox $
+        [ borderWithLabel (withAttr titleAttr $ txt " Conversation ") $
             viewport ChatHistoryViewport Vertical $
             padAll 1 $
             vBox (map drawMsg (llmMessages chat) ++ [drawStatus])
         , drawChatInput chat
-        , drawKeyboard chatKeyboardState
-        , statusBar s "[Enter] Send  [↑↓] Scroll  [Esc] Exit"
         ]
+        ++ (if llmShowKeyboard chat then [drawKeyboard chatKeyboardState] else [])
+        ++ [statusBar s hints]
   where
-    title = " " <> taskLabel (llmTask chat)
-         <> "  [" <> personaName (llmPersona chat) <> "] "
+    hints = case llmInputMode chat of
+        NormalMode -> "[i] Insert  [Enter] Send  [K] Keyboard  [j/k] Scroll  [Esc] Exit"
+        InsertMode -> "[Esc] Normal mode  [Enter] New line"
 
     drawMsg msg =
         padBottom (Pad 1) $ case llmRole msg of
@@ -551,9 +551,20 @@ drawLLMChat s chat =
 
 drawChatInput :: LLMChatState -> Widget Name
 drawChatInput chat =
-    withBorderStyle unicode $
-    borderWithLabel (txt " Message ") $
-    padAll 1 $ txt $ llmInput chat <> "│"
+    borderWithLabel (modeLabel <+> txt " Message ") $
+    padAll 1 $
+    vBox (zipWith renderLine [0..] inputLines)
+  where
+    inputLines = T.splitOn "\n" (llmInput chat)
+    lineCount  = length inputLines
+    renderLine i ln =
+        padRight Max $ txt $ if i == lineCount - 1 then ln <> cursor else ln
+    cursor = case llmInputMode chat of
+        InsertMode -> "│"
+        NormalMode -> ""
+    modeLabel = case llmInputMode chat of
+        NormalMode -> withAttr hintAttr  $ txt " N "
+        InsertMode -> withAttr promptAttr $ txt " I "
 
 
 -- | Draw the settings screen.
