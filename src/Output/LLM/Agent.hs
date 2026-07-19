@@ -49,7 +49,7 @@ taskMenuDesc TeachGrammar       = "AI explains a Korean grammar point"
 -- is prepended so the teacher persona has full context on the student.
 agentSystemPrompt :: Persona -> AgentTask -> Language -> Int -> Maybe Text -> Text
 agentSystemPrompt persona task lang level mBrief = T.unlines $
-    personaHeader : "" : briefBlock ++ taskInstructions
+    hardRules ++ [""] ++ [personaHeader, ""] ++ briefBlock ++ taskInstructions
   where
     personaHeader = "You are " <> personaName persona
         <> ", a " <> personaStyle persona <> " Korean language teacher."
@@ -59,43 +59,39 @@ agentSystemPrompt persona task lang level mBrief = T.unlines $
     langName = showLanguage lang
     levelStr = T.pack (show level)
 
-    -- Global rules prepended to every task prompt.
-    noRomanization =
-        [ "STRICT RULE — NO ROMANIZATION: Never write Korean sounds in Latin letters."
-        , "Do not write 'annyeonghaseyo', 'gamsahamnida', 'geu', 'neun', or any other"
-        , "romanized transcription. Write Korean in Hangul only, always."
-        , "This includes greetings, names, and parenthetical pronunciation hints."
-        , "WRONG: '안녕하세요 (annyeonghaseyo)'  RIGHT: '안녕하세요'"
+    -- Hard rules first — small models attend to these better at the top.
+    hardRules =
+        [ "RULE 1 — NO ROMANIZATION."
+        , "Never add Latin letters after Korean. No parenthetical pronunciations."
+        , "WRONG: 안녕하세요 (annyeonghaseyo)   책 (chaek)   물 (mul)"
+        , "RIGHT: 안녕하세요   책   물"
+        , ""
+        , "RULE 2 — NEVER PUT THE ANSWER IN THE QUESTION."
+        , "WRONG: 'Type the word for book: 책'  or  'What does 책 mean? (book)'"
+        , "RIGHT: 'What does 책 mean?'  or  'Type the Korean word for book.'"
+        , ""
+        , "RULE 3 — TEXT CHAT ONLY. No handwriting, stroke order, or 'write out' tasks."
+        , "The student types Korean directly on a keyboard."
         ]
 
     interfaceRules =
-        [ "INTERFACE: This is a terminal text chat. Input is via keyboard only."
-        , "There is NO handwriting, NO stroke order, NO physical writing."
-        , "Do not ask the student to 'write out' letters or 'practice forming shapes'."
-        , "The student CAN type Korean characters (Hangul) directly."
-        , "Good exercise types: type a Korean word, read and translate a sentence,"
+        [ "Good exercise types: type a Korean word, read and translate a sentence,"
         , "answer a vocabulary question, complete a sentence, have a conversation."
         ]
 
-    taskInstructions = noRomanization <> [""] <> interfaceRules <> [""] <> case task of
+    taskInstructions = interfaceRules <> [""] <> case task of
         AssessLevel ->
             [ "Task: Assess the student's Korean proficiency level (TOPIK 1-6)."
             , "The student's native language is " <> langName <> "."
             , "- Ask one question at a time and wait for a response before continuing"
             , "- Start simple (reading Hangul) and increase difficulty with each exchange"
             , "- Provide all explanations in " <> langName
-            , ""
-            , "QUESTION DESIGN — follow these rules strictly:"
-            , "- NEVER put the answer inside the question itself."
-            , "  WRONG: 'What letter is this? (ㄱ)'  — the answer is right there."
-            , "  RIGHT: 'What sound does ㄱ make?' or 'What does 물 mean?'"
-            , "- Test comprehension and production, not visual pattern-matching."
             , "- Good question types:"
             , "  * Show a Korean word, ask for its meaning: '물 — what does this mean?'"
-            , "  * Ask the student to type a word: '\"water\" in Korean — type it for me'"
+            , "  * Ask the student to type a word: 'Type the Korean word for water.'"
             , "  * Show a sentence and ask for a translation"
             , "  * Fill-in-the-blank: '저는 학생___. (I am a student.)'"
-            , "  * Ask what sound a consonant or vowel makes"
+            , "  * Ask what sound a letter makes: 'What sound does ㄱ make?'"
             , ""
             , "- After 6-10 exchanges, conclude with EXACTLY this line (no variation):"
             , "  ASSESSMENT COMPLETE: TOPIK Level [1-6]"
