@@ -2,7 +2,7 @@ data
 
 # Nix & direnv
 .direnv/
-.envrc
+.envrc.local
 result
 result-*
 *.drv

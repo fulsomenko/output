@@ -11,11 +11,14 @@ import qualified Graphics.Vty as V
 import qualified Graphics.Vty.CrossPlatform as VCross
 import Data.Time (getCurrentTime, utcToLocalTime, utc)
 import qualified Data.Map as Map
+import Data.Text (pack)
+import System.Environment (lookupEnv)
 
 import Output.TUI.Types
 import Output.TUI.Draw (drawUI)
 import Output.TUI.Events (handleEvent)
 import Output.Repository.Json (runJsonRepository, loadSettings)
+import Output.Domain.Settings (AppSettings(..))
 import Output.Repository.Class
     ( getAllVocabCards
     , getProgress
@@ -41,6 +44,17 @@ theAttrMap = attrMap V.defAttr
     , (statsAttr,        fg V.white)
     , (aiAttr,           fg V.magenta `V.withStyle` V.bold)
     ]
+
+-- | Override Ollama connection settings from environment variables.
+-- OLLAMA_HOST and OLLAMA_MODEL take priority over settings.json and defaults.
+applyEnvOverrides :: AppSettings -> IO AppSettings
+applyEnvOverrides s = do
+    host  <- lookupEnv "OLLAMA_HOST"
+    model <- lookupEnv "OLLAMA_MODEL"
+    pure s
+        { settingsOllamaHost  = maybe (settingsOllamaHost s)  pack host
+        , settingsOllamaModel = maybe (settingsOllamaModel s) pack model
+        }
 
 -- | Run the TUI application
 runTUI :: IO ()
@@ -68,7 +82,7 @@ runTUI = do
     typingProgress <- runJsonRepository getTypingProgress
     vocabStates   <- runJsonRepository getAllVocabStates
     activities    <- runJsonRepository getAllActivities
-    settings      <- loadSettings
+    settings      <- loadSettings >>= applyEnvOverrides
 
     let dueCards = Map.keys $ Map.filter isDue vocabStates
         isDue state = vstNextReviewDate state <= now
