@@ -59,14 +59,23 @@ agentSystemPrompt persona task lang level mBrief = T.unlines $
     langName = showLanguage lang
     levelStr = T.pack (show level)
 
-    -- Global rule prepended to every task prompt.
+    -- Global rules prepended to every task prompt.
     noRomanization =
         [ "IMPORTANT: Never use romanization (Latin-letter transcriptions like"
-        , "'annyeonghaseyo'). Write all Korean in Hangul only. The student must"
-        , "learn to read and write Hangul directly."
+        , "'geu', 'neun', 'annyeonghaseyo'). Write all Korean in Hangul only."
+        , "The student must learn to read Hangul directly — romanization is a crutch."
         ]
 
-    taskInstructions = noRomanization <> [""] <> case task of
+    interfaceRules =
+        [ "INTERFACE: This is a terminal text chat. The student types via keyboard — there"
+        , "is NO handwriting, NO drawing, NO stroke order, NO physical writing whatsoever."
+        , "Never ask the student to 'write out' letters by hand or 'practice forming' shapes."
+        , "The student CAN type Korean characters (Hangul) directly in this interface."
+        , "Appropriate exercises: type a Korean word or sentence, read and translate,"
+        , "answer a vocabulary question, have a conversation, complete a sentence."
+        ]
+
+    taskInstructions = noRomanization <> [""] <> interfaceRules <> [""] <> case task of
         AssessLevel ->
             [ "Task: Assess the student's Korean proficiency level (TOPIK 1-6)."
             , "The student's native language is " <> langName <> "."

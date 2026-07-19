@@ -498,10 +498,14 @@ handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'i') [])) =
     modify $ \s -> case asLLMChat s of
         Nothing -> s
         Just c  -> s { asLLMChat = Just c { llmInputMode = InsertMode } }
-handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'K') [])) =
+handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'K') [])) = do
     modify $ \s -> case asLLMChat s of
         Nothing -> s
         Just c  -> s { asLLMChat = Just c { llmShowKeyboard = not (llmShowKeyboard c) } }
+    -- The ~10-row layout shift confuses vty's diff renderer, leaving ghost rows.
+    -- Force a complete terminal repaint so no artifacts remain.
+    vty <- getVtyHandle
+    liftIO $ V.refresh vty
 handleChatNormal _ (VtyEvent (V.EvKey V.KUp [])) =
     vScrollBy (viewportScroll ChatHistoryViewport) (-1)
 handleChatNormal _ (VtyEvent (V.EvKey V.KDown [])) =
