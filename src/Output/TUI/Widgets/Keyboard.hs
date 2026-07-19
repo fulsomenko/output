@@ -7,7 +7,6 @@ module Output.TUI.Widgets.Keyboard
       -- * Drawing
     , drawKeyboard
     , drawKeyboardCompact
-    , drawKeyboardReference
       -- * Key Info
     , fingerColor
     , keyRow
@@ -39,6 +38,7 @@ data KeyboardState = KeyboardState
     { ksAvailableKeys :: Set Jamo    -- Keys that are unlocked
     , ksNextKey :: Maybe Jamo        -- Key to highlight
     , ksLastKeyState :: Maybe (Jamo, KeyState)  -- Last pressed key and its state
+    , ksShowQwerty :: Bool           -- Show QWERTY letter above each Korean key
     } deriving (Eq, Show)
 
 -- | Get color for a finger position (0-9 from pinky to pinky)
@@ -96,11 +96,19 @@ homeRowFingers = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 bottomRowFingers :: [Int]
 bottomRowFingers = [0, 1, 2, 3, 4, 5, 6]
 
--- | Draw a single key
+-- | Draw a single key. When ksShowQwerty is True the QWERTY letter appears
+-- above the Korean jamo (dim grey), mirroring a physical Korean keyboard label.
 drawKey :: KeyboardState -> Int -> (Char, Jamo) -> Widget n
 drawKey kbState fingerIdx (qwerty, jamo) =
-    modifyDefAttr (const attr) $
-        padLeftRight 1 $
+    padLeftRight 1 $
+    if ksShowQwerty kbState
+        then vBox
+            [ modifyDefAttr (\a -> a `V.withForeColor` V.brightBlack) $
+                txt (T.singleton qwerty)
+            , modifyDefAttr (const attr) $
+                txt (T.singleton $ jamoChar jamo)
+            ]
+        else modifyDefAttr (const attr) $
             txt (T.singleton $ jamoChar jamo)
   where
     attr = case keyState of
@@ -178,23 +186,3 @@ jamoChar (Consonant c) = c
 jamoChar (Vowel c) = c
 jamoChar (DoubleConsonant c) = c
 
--- | Draw a QWERTY→Korean reference keyboard for chat screens.
--- Each key shows the Latin letter above and the Korean jamo below.
-drawKeyboardReference :: Widget n
-drawKeyboardReference =
-    borderWithLabel (txt " QWERTY → 한글 ") $
-    padLeftRight 1 $
-    vBox
-        [ hCenter $ hBox $ map drawRefKey topRowLayout
-        , hCenter $ padLeft (Pad 2) $ hBox $ map drawRefKey homeRowLayout
-        , hCenter $ padLeft (Pad 4) $ hBox $ map drawRefKey bottomRowLayout
-        ]
-  where
-    drawRefKey (qwerty, jamo) =
-        padLeftRight 1 $
-        vBox
-            [ modifyDefAttr (\a -> a `V.withForeColor` V.brightBlack) $
-                txt (T.singleton qwerty)
-            , modifyDefAttr (\a -> a `V.withForeColor` V.cyan) $
-                txt (T.singleton $ jamoChar jamo)
-            ]

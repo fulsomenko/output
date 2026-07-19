@@ -58,6 +58,7 @@ handleEvent chan ev = do
         QuitConfirmScreen   -> handleQuitEvent ev
         LLMChatScreen       -> handleLLMChatEvent chan ev
         SettingsScreen      -> handleSettingsEvent ev
+        PersonaScreen       -> handlePersonaEvent ev
 
 -- | Handle menu events
 handleMenuEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
@@ -361,6 +362,7 @@ handleLLMChatEvent _ (AppEvent (LLMResponse result)) = do
                     { asLLMChat  = Just chat { llmMessages = newMsgs, llmWaiting = False }
                     , asSettings = newSettings
                     }
+                vScrollToEnd (viewportScroll ChatHistoryViewport)
 -- User submits a message
 handleLLMChatEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
     s <- get
@@ -390,6 +392,11 @@ handleLLMChatEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
                     liftIO $ void $ forkIO $ do
                         res <- callOllama cfg sysPrompt oMsgs
                         writeBChan chan (LLMResponse res)
+-- Scroll chat history
+handleLLMChatEvent _ (VtyEvent (V.EvKey V.KUp [])) =
+    vScrollBy (viewportScroll ChatHistoryViewport) (-1)
+handleLLMChatEvent _ (VtyEvent (V.EvKey V.KDown [])) =
+    vScrollBy (viewportScroll ChatHistoryViewport) 1
 -- User types a character
 handleLLMChatEvent _ (VtyEvent (V.EvKey (V.KChar c) [])) =
     modify $ \s -> case asLLMChat s of
@@ -421,7 +428,44 @@ handleSettingsEvent (VtyEvent (V.EvKey (V.KChar 'l') [])) = do
                   }
     liftIO $ saveSettings new
     modify $ \st -> st { asSettings = new }
+handleSettingsEvent (VtyEvent (V.EvKey (V.KChar 'p') [])) =
+    modify $ \s -> s { asScreen = PersonaScreen }
 handleSettingsEvent _ = pure ()
+
+-- | Handle persona screen events.
+handlePersonaEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+handlePersonaEvent (VtyEvent (V.EvKey V.KEsc [])) =
+    modify $ \s -> s { asScreen = SettingsScreen }
+-- [N] prompts inline editing of persona name via llmInput as scratch buffer
+handlePersonaEvent (VtyEvent (V.EvKey (V.KChar 'n') [])) = do
+    s <- get
+    let name = settingsPersonaName (asSettings s)
+    modify $ \st -> st { asPersonaEdit = Just (PersonaEditName, name) }
+handlePersonaEvent (VtyEvent (V.EvKey (V.KChar 't') [])) = do
+    s <- get
+    let style = settingsPersonaStyle (asSettings s)
+    modify $ \st -> st { asPersonaEdit = Just (PersonaEditStyle, style) }
+-- While editing: character input, backspace, enter to confirm, esc to cancel
+handlePersonaEvent (VtyEvent (V.EvKey (V.KChar c) [])) =
+    modify $ \s -> case asPersonaEdit s of
+        Nothing         -> s
+        Just (field, t) -> s { asPersonaEdit = Just (field, t <> T.singleton c) }
+handlePersonaEvent (VtyEvent (V.EvKey V.KBS [])) =
+    modify $ \s -> case asPersonaEdit s of
+        Nothing         -> s
+        Just (field, t) -> s { asPersonaEdit = Just (field, T.dropEnd 1 t) }
+handlePersonaEvent (VtyEvent (V.EvKey V.KEnter [])) = do
+    s <- get
+    case asPersonaEdit s of
+        Nothing -> pure ()
+        Just (field, value) -> do
+            let old = asSettings s
+                new = case field of
+                    PersonaEditName  -> old { settingsPersonaName  = value }
+                    PersonaEditStyle -> old { settingsPersonaStyle = value }
+            liftIO $ saveSettings new
+            modify $ \st -> st { asSettings = new, asPersonaEdit = Nothing }
+handlePersonaEvent _ = pure ()
 
 -- | Update SRS state for a vocabulary card after review
 -- 1. Get current state from asVocabStates (or initialize new)

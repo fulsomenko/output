@@ -9,7 +9,7 @@ module Output.Domain.Settings
     ) where
 
 import Data.Text (Text)
-import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson (FromJSON(..), ToJSON, withObject, (.:), (.:?), (.!=))
 import GHC.Generics (Generic)
 
 data Language = English | Swedish
@@ -23,19 +23,38 @@ showLanguage English = "English"
 showLanguage Swedish = "Swedish"
 
 data AppSettings = AppSettings
-    { settingsLanguage    :: Language
-    , settingsKoreanLevel :: Maybe Int   -- 1-6, Nothing = not yet assessed
-    , settingsOllamaHost  :: Text
-    , settingsOllamaModel :: Text
+    { settingsLanguage     :: Language
+    , settingsKoreanLevel  :: Maybe Int   -- 1-6, Nothing = not yet assessed
+    , settingsOllamaHost   :: Text
+    , settingsOllamaModel  :: Text
+    , settingsPersonaName  :: Text        -- Instructor display name
+    , settingsPersonaStyle :: Text        -- Instructor teaching style description
     } deriving (Show, Eq, Generic)
 
-instance FromJSON AppSettings
+-- Custom instance so new fields degrade gracefully on old settings.json files.
+instance FromJSON AppSettings where
+    parseJSON = withObject "AppSettings" $ \o -> AppSettings
+        <$> o .:  "settingsLanguage"
+        <*> o .:? "settingsKoreanLevel"
+        <*> (o .:? "settingsOllamaHost"   .!= "http://localhost:11434")
+        <*> (o .:? "settingsOllamaModel"  .!= "gemma3:4b")
+        <*> (o .:? "settingsPersonaName"  .!= defaultPersonaName)
+        <*> (o .:? "settingsPersonaStyle" .!= defaultPersonaStyle)
+
 instance ToJSON AppSettings
+
+defaultPersonaName :: Text
+defaultPersonaName = "Teacher Kim (선생님 김)"
+
+defaultPersonaStyle :: Text
+defaultPersonaStyle = "patient, structured, and encouraging"
 
 defaultSettings :: AppSettings
 defaultSettings = AppSettings
-    { settingsLanguage    = English
-    , settingsKoreanLevel = Nothing
-    , settingsOllamaHost  = "http://localhost:11434"
-    , settingsOllamaModel = "gemma3:4b"
+    { settingsLanguage     = English
+    , settingsKoreanLevel  = Nothing
+    , settingsOllamaHost   = "http://localhost:11434"
+    , settingsOllamaModel  = "gemma3:4b"
+    , settingsPersonaName  = defaultPersonaName
+    , settingsPersonaStyle = defaultPersonaStyle
     }

@@ -183,6 +183,7 @@ makeKeyboardState ts = KeyboardState
     { ksAvailableKeys = tlKeys (typLevel ts)
     , ksNextKey = nextExpectedKey
     , ksLastKeyState = lastKeyState
+    , ksShowQwerty = False
     }
   where
     typed = typTypedJamo ts

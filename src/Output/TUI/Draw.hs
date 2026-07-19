@@ -24,7 +24,9 @@ import Output.Domain.Settings (AppSettings(..), showLanguage)
 import Output.LLM.Agent (AgentTask(..), taskLabel)
 import Output.LLM.Persona (personaName)
 import Output.TUI.Widgets.TypingPractice
-import Output.TUI.Widgets.Keyboard (drawKeyboardReference)
+import Output.TUI.Widgets.Keyboard (KeyboardState(..), drawKeyboard)
+import Output.Domain.Jamo (allConsonants, allVowels)
+import qualified Data.Set as Set
 import qualified Data.Map as Map
 
 -- | Main draw function
@@ -51,6 +53,7 @@ drawUI s = [ui]
             Just chat -> drawLLMChat s chat
             Nothing   -> drawMainMenu s
         SettingsScreen -> drawSettings s
+        PersonaScreen  -> drawPersonaScreen s
 
 -- | Shared status bar shown at the bottom of every screen
 statusBar :: AppState -> Text -> Widget Name
@@ -497,25 +500,31 @@ drawLevelSelectScreen s ts progress =
 -- AI Lesson screens
 -- ---------------------------------------------------------------------------
 
+-- | Full-key reference keyboard state for the chat screen.
+chatKeyboardState :: KeyboardState
+chatKeyboardState = KeyboardState
+    { ksAvailableKeys = allConsonants `Set.union` allVowels
+    , ksNextKey       = Nothing
+    , ksLastKeyState  = Nothing
+    , ksShowQwerty    = True
+    }
+
 -- | Draw the LLM chat screen for AI-powered lessons.
 drawLLMChat :: AppState -> LLMChatState -> Widget Name
 drawLLMChat s chat =
     withBorderStyle unicodeBold $
     vBox
         [ borderWithLabel (withAttr titleAttr $ txt title) $
-            vBox
-                [ padAll 1 drawHistory
-                , padAll 1 drawStatus
-                ]
+            viewport ChatHistoryViewport Vertical $
+            padAll 1 $
+            vBox (map drawMsg (llmMessages chat) ++ [drawStatus])
         , drawChatInput chat
-        , drawKeyboardReference
-        , statusBar s "[Enter] Send  [Esc] Exit"
+        , drawKeyboard chatKeyboardState
+        , statusBar s "[Enter] Send  [↑↓] Scroll  [Esc] Exit"
         ]
   where
     title = " " <> taskLabel (llmTask chat)
          <> "  [" <> personaName (llmPersona chat) <> "] "
-
-    drawHistory = vBox $ map drawMsg $ takeLast 18 (llmMessages chat)
 
     drawMsg msg =
         padBottom (Pad 1) $ case llmRole msg of
@@ -561,7 +570,7 @@ drawSettings s =
             , padTop (Pad 1) $ row "Ollama model" (settingsOllamaModel settings)
             ]
         , fill ' '
-        , statusBar s "[L] Toggle language  [Esc] Back"
+        , statusBar s "[L] Toggle language  [P] Persona  [Esc] Back"
         ]
   where
     settings = asSettings s
@@ -569,4 +578,38 @@ drawSettings s =
         [ withAttr hintAttr $ txt $ padRight' 16 label <> "  "
         , withAttr statsAttr $ txt value
         ]
+    padRight' n t = t <> T.replicate (max 0 (n - T.length t)) " "
+
+-- | Draw the persona customisation screen.
+drawPersonaScreen :: AppState -> Widget Name
+drawPersonaScreen s =
+    withBorderStyle unicodeBold $
+    borderWithLabel (withAttr titleAttr $ txt " Persona Settings ") $
+    vBox
+        [ padAll 2 $ vBox
+            [ withAttr titleAttr $ txt "Active instructor"
+            , padTop (Pad 1) $ fieldRow "Name"  PersonaEditName  (settingsPersonaName  settings)
+            , padTop (Pad 1) $ fieldRow "Style" PersonaEditStyle (settingsPersonaStyle settings)
+            , padTop (Pad 1) $ withAttr hintAttr hBorder
+            , padTop (Pad 1) $ withAttr hintAttr $ txtWrap
+                "Changes take effect on the next lesson — active sessions are not affected."
+            ]
+        , fill ' '
+        , statusBar s "[N] Edit name  [T] Edit style  [Enter] Confirm  [Esc] Back"
+        ]
+  where
+    settings = asSettings s
+    editing  = asPersonaEdit s
+    fieldRow label field savedValue =
+        let isEditing = fmap fst editing == Just field
+            displayed = case editing of
+                Just (f, buf) | f == field -> buf <> "│"
+                _                          -> savedValue
+            valueWidget
+                | isEditing = withAttr promptAttr $ txt displayed
+                | otherwise = withAttr statsAttr  $ txt displayed
+        in hBox
+            [ withAttr hintAttr $ txt $ padRight' 8 label <> "  "
+            , valueWidget
+            ]
     padRight' n t = t <> T.replicate (max 0 (n - T.length t)) " "

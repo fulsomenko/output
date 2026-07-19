@@ -23,6 +23,8 @@ module Output.TUI.Types
     , LLMMessage(..)
     , LLMChatState(..)
     , initialLLMChatState
+      -- * Persona Edit
+    , PersonaEditField(..)
       -- * Application State
     , AppState(..)
     , AppEvent(..)
@@ -73,6 +75,7 @@ data Name
     | TypingInput
     | KeyboardView
     | LevelSelector
+    | ChatHistoryViewport
     deriving (Show, Eq, Ord)
 
 -- | Application screens
@@ -88,6 +91,7 @@ data Screen
     | QuitConfirmScreen
     | LLMChatScreen
     | SettingsScreen
+    | PersonaScreen
     deriving (Show, Eq)
 
 -- | Mode of the drill exercise
@@ -233,6 +237,10 @@ initialLLMChatState task persona = LLMChatState
     , llmError    = Nothing
     }
 
+-- | Which persona field is being edited on the persona screen.
+data PersonaEditField = PersonaEditName | PersonaEditStyle
+    deriving (Show, Eq)
+
 -- | Custom events for the application
 data AppEvent
     = Tick
@@ -258,8 +266,9 @@ data AppState = AppState
     , asActivities :: [ActivityEntry]       -- Full activity log
     , asStatsSelectedDay :: Int             -- Selected day index in stats screen
     -- LLM / AI lessons
-    , asLLMChat :: Maybe LLMChatState       -- Active AI lesson chat
-    , asSettings :: AppSettings             -- Language, level, Ollama config
+    , asLLMChat    :: Maybe LLMChatState       -- Active AI lesson chat
+    , asSettings   :: AppSettings              -- Language, level, Ollama config
+    , asPersonaEdit :: Maybe (PersonaEditField, Text)  -- Active persona field edit
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -282,8 +291,9 @@ initialAppState = AppState
     , asActivities = []
     , asStatsSelectedDay = 0
     -- LLM defaults
-    , asLLMChat = Nothing
-    , asSettings = defaultSettings
+    , asLLMChat     = Nothing
+    , asSettings    = defaultSettings
+    , asPersonaEdit = Nothing
     }
 
 -- | Attribute names for styling
