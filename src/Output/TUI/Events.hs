@@ -502,10 +502,13 @@ handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'K') [])) = do
     modify $ \s -> case asLLMChat s of
         Nothing -> s
         Just c  -> s { asLLMChat = Just c { llmShowKeyboard = not (llmShowKeyboard c) } }
-    -- The ~10-row layout shift confuses vty's diff renderer, leaving ghost rows.
-    -- Force a complete terminal repaint so no artifacts remain.
+    -- The ~10-row layout shift leaves ghost rows when vty diffs old→new.
+    -- Write a blank picture first so vty's baseline is empty; the next
+    -- Brick render then diffs empty→new and sends a complete repaint.
     vty <- getVtyHandle
-    liftIO $ V.refresh vty
+    liftIO $ do
+        (w, h) <- V.displayBounds (V.outputIface vty)
+        V.update vty $ V.picForImage $ V.backgroundFill w h
 handleChatNormal _ (VtyEvent (V.EvKey V.KUp [])) =
     vScrollBy (viewportScroll ChatHistoryViewport) (-1)
 handleChatNormal _ (VtyEvent (V.EvKey V.KDown [])) =

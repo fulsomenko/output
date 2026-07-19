@@ -57,7 +57,7 @@ drawUI s = [ui]
 -- | Shared status bar shown at the bottom of every screen
 statusBar :: AppState -> Text -> Widget Name
 statusBar s hints = vBox
-    [ hBorder
+    [ withBorderStyle unicode hBorder
     , padLeftRight 1 $ hBox
         [ withAttr correctAttr $ txt $ "🔥 " <> T.pack (show $ asDailyStreak s) <> " streak"
         , txt "  ·  "
