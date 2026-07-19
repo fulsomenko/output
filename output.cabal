@@ -28,6 +28,7 @@ library
         Output.Domain.TypingLevel
         Output.Domain.TypingWord
         Output.Domain.TypingExercise
+        Output.Domain.Settings
         Output.Repository.Class
         Output.Repository.Json
         Output.Repository.Memory
@@ -35,6 +36,9 @@ library
         Output.Algorithm.SpacedRepetition
         Output.Algorithm.ExerciseGen
         Output.Algorithm.Streak
+        Output.LLM.Client
+        Output.LLM.Persona
+        Output.LLM.Agent
         Output.CLI
         Output.App
         Output.TUI.Types
@@ -55,7 +59,8 @@ library
         brick >=2.0,
         vty >=6.0,
         vty-unix >=0.2,
-        vty-crossplatform >=0.4
+        vty-crossplatform >=0.4,
+        http-client >=0.7
     hs-source-dirs:   src
     default-language: Haskell2010
 

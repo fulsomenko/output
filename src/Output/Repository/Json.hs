@@ -7,6 +7,8 @@
 module Output.Repository.Json
     ( JsonRepository(..)
     , runJsonRepository
+    , loadSettings
+    , saveSettings
     ) where
 
 import Data.Aeson (decode, encode, FromJSON, ToJSON)
@@ -31,6 +33,7 @@ import Output.Domain.Types
     )
 import Output.Domain.Activity (ActivityEntry(..))
 import Output.Domain.Progress (emptyUserProgress)
+import Output.Domain.Settings (AppSettings, defaultSettings)
 import Output.Repository.Class
     ( ActivityRepository(..)
     , VocabularyRepository(..)
@@ -198,3 +201,20 @@ instance TypingProgressRepository JsonRepository where
         progress <- unJsonRepository getTypingProgress
         let newProgress = progress { tpCompletedLevels = Set.insert levelNum (tpCompletedLevels progress) }
         unJsonRepository $ saveTypingProgress newProgress
+
+-- | Load app settings from disk, returning defaults if the file is missing or unreadable.
+loadSettings :: IO AppSettings
+loadSettings = do
+    let filePath = "data/user-data/settings.json"
+    exists <- doesFileExist filePath
+    if not exists
+        then pure defaultSettings
+        else do
+            content <- BL.readFile filePath
+            pure $ maybe defaultSettings id (decode content)
+
+-- | Persist app settings to disk.
+saveSettings :: AppSettings -> IO ()
+saveSettings settings = do
+    createDirectoryIfMissing True "data/user-data"
+    BL.writeFile "data/user-data/settings.json" (encode settings)

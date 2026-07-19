@@ -19,6 +19,10 @@ module Output.TUI.Types
       -- * Session Stats
     , SessionStats(..)
     , emptySessionStats
+      -- * LLM Chat
+    , LLMMessage(..)
+    , LLMChatState(..)
+    , initialLLMChatState
       -- * Application State
     , AppState(..)
     , AppEvent(..)
@@ -36,6 +40,7 @@ module Output.TUI.Types
     , keyboardAttr
     , keyHighlightAttr
     , keyDisabledAttr
+    , aiAttr
     ) where
 
 import Data.Text (Text)
@@ -55,6 +60,9 @@ import Output.Domain.Jamo (Jamo)
 import Output.Domain.TypingLevel (TypingLevel)
 import Output.Domain.TypingWord (TypingWord)
 import Output.Domain.TypingExercise (TypingExerciseType, TypingPrompt, CharStatus)
+import Output.Domain.Settings (AppSettings, defaultSettings)
+import Output.LLM.Agent (AgentTask(..))
+import Output.LLM.Persona (Persona, teacherKim)
 
 -- | Widget names for focus management
 data Name
@@ -78,6 +86,8 @@ data Screen
     | DayDetailScreen
     | HelpScreen
     | QuitConfirmScreen
+    | LLMChatScreen
+    | SettingsScreen
     deriving (Show, Eq)
 
 -- | Mode of the drill exercise
@@ -197,9 +207,36 @@ emptySessionStats now = SessionStats
     , ssSessionStart = now
     }
 
+-- | A single message in an LLM conversation (role = "user" or "assistant").
+data LLMMessage = LLMMessage
+    { llmRole    :: Text
+    , llmContent :: Text
+    } deriving (Show, Eq, Generic)
+
+-- | State for an active LLM chat session.
+data LLMChatState = LLMChatState
+    { llmTask     :: AgentTask
+    , llmPersona  :: Persona
+    , llmMessages :: [LLMMessage]
+    , llmInput    :: Text
+    , llmWaiting  :: Bool         -- True while waiting for Ollama
+    , llmError    :: Maybe Text   -- Last error from Ollama, if any
+    } deriving (Show, Eq, Generic)
+
+initialLLMChatState :: AgentTask -> Persona -> LLMChatState
+initialLLMChatState task persona = LLMChatState
+    { llmTask     = task
+    , llmPersona  = persona
+    , llmMessages = []
+    , llmInput    = ""
+    , llmWaiting  = True    -- AI sends the opening message immediately
+    , llmError    = Nothing
+    }
+
 -- | Custom events for the application
 data AppEvent
-    = Tick  -- For timers if needed
+    = Tick
+    | LLMResponse (Either Text Text)   -- Left = error, Right = assistant message
     deriving (Show, Eq)
 
 -- | Main application state
@@ -220,6 +257,9 @@ data AppState = AppState
     , asDailyStreak :: Int                  -- Current streak in days
     , asActivities :: [ActivityEntry]       -- Full activity log
     , asStatsSelectedDay :: Int             -- Selected day index in stats screen
+    -- LLM / AI lessons
+    , asLLMChat :: Maybe LLMChatState       -- Active AI lesson chat
+    , asSettings :: AppSettings             -- Language, level, Ollama config
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -241,6 +281,9 @@ initialAppState = AppState
     , asDailyStreak = 0
     , asActivities = []
     , asStatsSelectedDay = 0
+    -- LLM defaults
+    , asLLMChat = Nothing
+    , asSettings = defaultSettings
     }
 
 -- | Attribute names for styling
@@ -279,3 +322,6 @@ keyHighlightAttr = attrName "keyHighlight"
 
 keyDisabledAttr :: AttrName
 keyDisabledAttr = attrName "keyDisabled"
+
+aiAttr :: AttrName
+aiAttr = attrName "ai"

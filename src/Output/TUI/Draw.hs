@@ -20,6 +20,9 @@ import Output.TUI.Types
 import Output.Domain.Exercise (ExercisePrompt(..))
 import Output.Domain.Types (TypingProgress, VocabularyState(..), MasteryLevel(..), ExerciseType(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
+import Output.Domain.Settings (AppSettings(..), showLanguage)
+import Output.LLM.Agent (AgentTask(..), taskLabel)
+import Output.LLM.Persona (personaName)
 import Output.TUI.Widgets.TypingPractice
 import qualified Data.Map as Map
 
@@ -43,6 +46,10 @@ drawUI s = [ui]
         DayDetailScreen -> drawDayDetail s
         HelpScreen -> drawHelp s
         QuitConfirmScreen -> drawQuitConfirm
+        LLMChatScreen -> case asLLMChat s of
+            Just chat -> drawLLMChat s chat
+            Nothing   -> drawMainMenu s
+        SettingsScreen -> drawSettings s
 
 -- | Shared status bar shown at the bottom of every screen
 statusBar :: AppState -> Text -> Widget Name
@@ -78,16 +85,26 @@ drawMenuItems s = vBox $ zipWith (drawMenuItem (asMenuIndex s)) [0..] menuOption
   where
     dueCount = length (asDueCards s)
     dueLabel = "Review Due Cards (" <> T.pack (show dueCount) <> ")"
+    settings = asSettings s
+    levelLabel = case settingsKoreanLevel settings of
+        Nothing  -> "AI: Assess My Level"
+        Just lvl -> "AI: Assess My Level  [TOPIK " <> T.pack (show lvl) <> "]"
     menuOptions =
-        [ ("Typing Practice", "Learn Korean keyboard with guided levels")
-        , (dueLabel,          "Practice words due for SRS review")
-        , ("Typing Drill",    "Practice typing Korean words")
-        , ("Reading Drill",   "Read Korean and self-grade")
-        , ("Writing Drill",   "Translate English to Korean")
-        , ("View Progress",   "See your learning statistics")
-        , ("Activity Stats",  "View history of all practice sessions")
-        , ("Help",            "View keyboard shortcuts")
-        , ("Quit",            "Exit the application")
+        [ (levelLabel,         "Let AI determine your Korean TOPIK level")
+        , ("AI: Conversation", "Practice conversation at your level")
+        , ("AI: Vocabulary",   "AI teaches new vocabulary for your level")
+        , ("AI: Sentences",    "AI generates practice sentences")
+        , ("AI: Grammar",      "AI explains a Korean grammar point")
+        , (dueLabel,           "Practice words due for SRS review")
+        , ("Typing Practice",  "Learn Korean keyboard with guided levels")
+        , ("Typing Drill",     "Practice typing Korean words")
+        , ("Reading Drill",    "Read Korean and self-grade")
+        , ("Writing Drill",    "Translate English to Korean")
+        , ("View Progress",    "See your learning statistics")
+        , ("Activity Stats",   "View history of all practice sessions")
+        , ("Settings",         "Language and Ollama configuration")
+        , ("Help",             "View keyboard shortcuts")
+        , ("Quit",             "Exit the application")
         ]
 
 drawMenuItem :: Int -> Int -> (Text, Text) -> Widget Name
@@ -474,3 +491,80 @@ drawLevelSelectScreen s ts progress =
         , fill ' '
         , statusBar s "[↑/↓] Navigate  [Enter] Select  [Esc] Back"
         ]
+
+-- ---------------------------------------------------------------------------
+-- AI Lesson screens
+-- ---------------------------------------------------------------------------
+
+-- | Draw the LLM chat screen for AI-powered lessons.
+drawLLMChat :: AppState -> LLMChatState -> Widget Name
+drawLLMChat s chat =
+    withBorderStyle unicodeBold $
+    vBox
+        [ borderWithLabel (withAttr titleAttr $ txt title) $
+            vBox
+                [ padAll 1 drawHistory
+                , padAll 1 drawStatus
+                ]
+        , drawChatInput chat
+        , statusBar s "[Enter] Send  [Esc] Exit"
+        ]
+  where
+    title = " " <> taskLabel (llmTask chat)
+         <> "  [" <> personaName (llmPersona chat) <> "] "
+
+    drawHistory = vBox $ map drawMsg $ takeLast 18 (llmMessages chat)
+
+    drawMsg msg =
+        padBottom (Pad 1) $ case llmRole msg of
+            "user" ->
+                hBox [ withAttr promptAttr $ txt "You: "
+                     , txtWrap (llmContent msg)
+                     ]
+            _ ->
+                hBox [ withAttr aiAttr $ txt (personaName (llmPersona chat) <> ": ")
+                     , txtWrap (llmContent msg)
+                     ]
+
+    drawStatus
+        | llmWaiting chat =
+            withAttr hintAttr $ txt $ "⟳ " <> personaName (llmPersona chat) <> " is thinking..."
+        | otherwise = case llmError chat of
+            Just err -> withAttr incorrectAttr $ txtWrap $ "Error: " <> err
+            Nothing  -> emptyWidget
+
+drawChatInput :: LLMChatState -> Widget Name
+drawChatInput chat =
+    withBorderStyle unicode $
+    borderWithLabel (txt " Message ") $
+    padAll 1 $ txt $ llmInput chat <> "│"
+
+takeLast :: Int -> [a] -> [a]
+takeLast n xs = drop (max 0 (length xs - n)) xs
+
+-- | Draw the settings screen.
+drawSettings :: AppState -> Widget Name
+drawSettings s =
+    withBorderStyle unicodeBold $
+    borderWithLabel (withAttr titleAttr $ txt " Settings ") $
+    vBox
+        [ padAll 2 $ vBox
+            [ row "Language" (showLanguage (settingsLanguage settings))
+            , padTop (Pad 1) $ row "Korean level"
+                (maybe "Not assessed — run AI: Assess My Level"
+                       (\l -> "TOPIK " <> T.pack (show l))
+                       (settingsKoreanLevel settings))
+            , padTop (Pad 1) $ withAttr hintAttr hBorder
+            , padTop (Pad 1) $ row "Ollama host"  (settingsOllamaHost settings)
+            , padTop (Pad 1) $ row "Ollama model" (settingsOllamaModel settings)
+            ]
+        , fill ' '
+        , statusBar s "[L] Toggle language  [Esc] Back"
+        ]
+  where
+    settings = asSettings s
+    row label value = hBox
+        [ withAttr hintAttr $ txt $ padRight' 16 label <> "  "
+        , withAttr statsAttr $ txt value
+        ]
+    padRight' n t = t <> T.replicate (max 0 (n - T.length t)) " "

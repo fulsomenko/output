@@ -4,10 +4,13 @@ module Output.TUI.Events
     ( handleEvent
     ) where
 
-import Control.Monad (when)
+import Control.Monad (when, void)
 import Control.Monad.IO.Class (liftIO)
+import Control.Concurrent (forkIO)
 import Data.Char (digitToInt)
+import Data.Maybe (fromMaybe, isJust)
 import Brick
+import Brick.BChan (BChan, writeBChan)
 import qualified Graphics.Vty as V
 import qualified Data.Text as T
 import Data.Time (getCurrentTime, utcToLocalTime, utc, localDay, diffUTCTime)
@@ -28,59 +31,76 @@ import Output.Domain.TypingLevel (TypingLevel(..), mainLevels, getSubLevels, has
 import Output.Domain.TypingWord (TypingWord(..))
 import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), createSessionPrompts, validateTyping, CharStatus(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
-import Output.Repository.Json (runJsonRepository)
+import Output.Domain.Settings (AppSettings(..), Language(..), showLanguage)
+import Output.Repository.Json (runJsonRepository, saveSettings)
 import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity, getAllActivities)
 import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..), ratingToQuality)
 import Output.Algorithm.SpacedRepetition (defaultSM2, applySRSResult)
+import Output.LLM.Client (callOllama, ollamaFromSettings, OllamaMessage(..))
+import Output.LLM.Agent (AgentTask(..), agentSystemPrompt, parseAssessmentLevel)
+import Output.LLM.Persona (teacherKim)
 import qualified Data.Set as Set
 
--- | Main event handler
-handleEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
-handleEvent ev = do
+-- | Main event handler. The BChan is threaded through so LLM handlers
+-- can fork async calls and deliver results back to the app.
+handleEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
+handleEvent chan ev = do
     s <- get
     case asScreen s of
-        MainMenuScreen -> handleMenuEvent ev
-        DrillScreen -> handleDrillEvent ev
-        TypingPracticeScreen -> handleTypingEvent ev
+        MainMenuScreen      -> handleMenuEvent chan ev
+        DrillScreen         -> handleDrillEvent ev
+        TypingPracticeScreen    -> handleTypingEvent ev
         TypingLevelSelectScreen -> handleLevelSelectEvent ev
-        ProgressScreen -> handleProgressEvent ev
-        StatsScreen -> handleStatsEvent ev
-        DayDetailScreen -> handleDayDetailEvent ev
-        HelpScreen -> handleHelpEvent ev
-        QuitConfirmScreen -> handleQuitEvent ev
+        ProgressScreen      -> handleProgressEvent ev
+        StatsScreen         -> handleStatsEvent ev
+        DayDetailScreen     -> handleDayDetailEvent ev
+        HelpScreen          -> handleHelpEvent ev
+        QuitConfirmScreen   -> handleQuitEvent ev
+        LLMChatScreen       -> handleLLMChatEvent chan ev
+        SettingsScreen      -> handleSettingsEvent ev
 
 -- | Handle menu events
-handleMenuEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
-handleMenuEvent (VtyEvent (V.EvKey V.KEsc [])) =
+handleMenuEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
+handleMenuEvent _    (VtyEvent (V.EvKey V.KEsc [])) =
     modify $ \s -> s { asScreen = QuitConfirmScreen }
-handleMenuEvent (VtyEvent (V.EvKey (V.KChar 'q') [])) =
+handleMenuEvent _    (VtyEvent (V.EvKey (V.KChar 'q') [])) =
     modify $ \s -> s { asScreen = QuitConfirmScreen }
-handleMenuEvent (VtyEvent (V.EvKey V.KUp [])) =
+handleMenuEvent _    (VtyEvent (V.EvKey V.KUp [])) =
     modify $ \s -> s { asMenuIndex = max 0 (asMenuIndex s - 1) }
-handleMenuEvent (VtyEvent (V.EvKey (V.KChar 'k') [])) =
+handleMenuEvent _    (VtyEvent (V.EvKey (V.KChar 'k') [])) =
     modify $ \s -> s { asMenuIndex = max 0 (asMenuIndex s - 1) }
-handleMenuEvent (VtyEvent (V.EvKey V.KDown [])) =
-    modify $ \s -> s { asMenuIndex = min 8 (asMenuIndex s + 1) }
-handleMenuEvent (VtyEvent (V.EvKey (V.KChar 'j') [])) =
-    modify $ \s -> s { asMenuIndex = min 8 (asMenuIndex s + 1) }
-handleMenuEvent (VtyEvent (V.EvKey V.KEnter [])) = do
+handleMenuEvent _    (VtyEvent (V.EvKey V.KDown [])) =
+    modify $ \s -> s { asMenuIndex = min 14 (asMenuIndex s + 1) }
+handleMenuEvent _    (VtyEvent (V.EvKey (V.KChar 'j') [])) =
+    modify $ \s -> s { asMenuIndex = min 14 (asMenuIndex s + 1) }
+handleMenuEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
     s <- get
     case asMenuIndex s of
-        0 -> startTypingPractice
-        1 -> startDueCardReview
-        2 -> startDrill TypingMode
-        3 -> startDrill ReadingMode
-        4 -> startDrill WritingMode
-        5 -> modify $ \st -> st { asScreen = ProgressScreen }
-        6 -> do
+        -- AI lessons (0-4)
+        0 -> startLLMLesson chan AssessLevel
+        1 -> startLLMLesson chan HaveConversation
+        2 -> startLLMLesson chan GenerateVocabulary
+        3 -> startLLMLesson chan GenerateSentences
+        4 -> startLLMLesson chan TeachGrammar
+        -- Existing drills (5-9)
+        5 -> startDueCardReview
+        6 -> startTypingPractice
+        7 -> startDrill TypingMode
+        8 -> startDrill ReadingMode
+        9 -> startDrill WritingMode
+        -- Progress / stats (10-11)
+        10 -> modify $ \st -> st { asScreen = ProgressScreen }
+        11 -> do
             freshActivities <- liftIO $ runJsonRepository getAllActivities
             modify $ \st -> st { asScreen = StatsScreen, asActivities = freshActivities, asStatsSelectedDay = 0 }
-        7 -> modify $ \st -> st { asScreen = HelpScreen }
-        8 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
+        -- Settings / help / quit (12-14)
+        12 -> modify $ \st -> st { asScreen = SettingsScreen }
+        13 -> modify $ \st -> st { asScreen = HelpScreen }
+        14 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
         _ -> pure ()
-handleMenuEvent (VtyEvent (V.EvKey (V.KChar '?') [])) =
+handleMenuEvent _    (VtyEvent (V.EvKey (V.KChar '?') [])) =
     modify $ \s -> s { asScreen = HelpScreen }
-handleMenuEvent _ = pure ()
+handleMenuEvent _ _ = pure ()
 
 -- | Start a drill session
 -- Prioritizes due cards (from SRS), then new cards, max 10 total
@@ -296,6 +316,112 @@ endDrill = do
         , asDrill = Nothing
         , asMessage = msg
         }
+
+-- ---------------------------------------------------------------------------
+-- AI Lesson handlers
+-- ---------------------------------------------------------------------------
+
+-- | Open an AI lesson chat. Kicks off the AI's opening message immediately.
+startLLMLesson :: BChan AppEvent -> AgentTask -> EventM Name AppState ()
+startLLMLesson chan task = do
+    s <- get
+    let settings = asSettings s
+        level    = fromMaybe 1 (settingsKoreanLevel settings)
+        chat     = initialLLMChatState task teacherKim
+        sysPrompt = agentSystemPrompt teacherKim task (settingsLanguage settings) level
+        cfg       = ollamaFromSettings settings
+    put s { asScreen = LLMChatScreen, asLLMChat = Just chat, asMessage = Nothing }
+    liftIO $ void $ forkIO $ do
+        -- Empty user message list → AI sends the opening greeting
+        let openingMsg = OllamaMessage { role = "user", content = "[Begin lesson]" }
+        result <- callOllama cfg sysPrompt [openingMsg]
+        writeBChan chan (LLMResponse result)
+
+-- | Handle events on the LLM chat screen.
+handleLLMChatEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
+-- Async response arrived from the background thread
+handleLLMChatEvent _ (AppEvent (LLMResponse result)) = do
+    s <- get
+    case asLLMChat s of
+        Nothing   -> pure ()
+        Just chat -> case result of
+            Left err ->
+                modify $ \st -> st
+                    { asLLMChat = Just chat { llmWaiting = False, llmError = Just err } }
+            Right resp -> do
+                let assistantMsg = LLMMessage { llmRole = "assistant", llmContent = resp }
+                    newMsgs      = llmMessages chat ++ [assistantMsg]
+                    detectedLevel = parseAssessmentLevel resp
+                    newSettings   = case detectedLevel of
+                        Nothing  -> asSettings s
+                        Just lvl -> (asSettings s) { settingsKoreanLevel = Just lvl }
+                when (isJust detectedLevel) $
+                    liftIO $ saveSettings newSettings
+                modify $ \st -> st
+                    { asLLMChat  = Just chat { llmMessages = newMsgs, llmWaiting = False }
+                    , asSettings = newSettings
+                    }
+-- User submits a message
+handleLLMChatEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
+    s <- get
+    case asLLMChat s of
+        Nothing   -> pure ()
+        Just chat ->
+            let input = T.strip (llmInput chat)
+            in if T.null input || llmWaiting chat
+               then pure ()
+               else do
+                    let userMsg  = LLMMessage { llmRole = "user", llmContent = input }
+                        newMsgs  = llmMessages chat ++ [userMsg]
+                        settings = asSettings s
+                        level    = fromMaybe 1 (settingsKoreanLevel settings)
+                        sysPrompt = agentSystemPrompt (llmPersona chat) (llmTask chat)
+                                        (settingsLanguage settings) level
+                        cfg      = ollamaFromSettings settings
+                        oMsgs    = map (\m -> OllamaMessage (llmRole m) (llmContent m)) newMsgs
+                    modify $ \st -> st
+                        { asLLMChat = Just chat
+                            { llmMessages = newMsgs
+                            , llmInput    = ""
+                            , llmWaiting  = True
+                            , llmError    = Nothing
+                            }
+                        }
+                    liftIO $ void $ forkIO $ do
+                        res <- callOllama cfg sysPrompt oMsgs
+                        writeBChan chan (LLMResponse res)
+-- User types a character
+handleLLMChatEvent _ (VtyEvent (V.EvKey (V.KChar c) [])) =
+    modify $ \s -> case asLLMChat s of
+        Nothing   -> s
+        Just chat -> s { asLLMChat = Just chat { llmInput = llmInput chat <> T.singleton c } }
+-- Backspace
+handleLLMChatEvent _ (VtyEvent (V.EvKey V.KBS [])) =
+    modify $ \s -> case asLLMChat s of
+        Nothing   -> s
+        Just chat -> s { asLLMChat = Just chat { llmInput = T.dropEnd 1 (llmInput chat) } }
+-- Esc exits
+handleLLMChatEvent _ (VtyEvent (V.EvKey V.KEsc [])) =
+    modify $ \s -> s { asScreen = MainMenuScreen, asLLMChat = Nothing }
+handleLLMChatEvent _ _ = pure ()
+
+-- | Handle settings screen events.
+handleSettingsEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+handleSettingsEvent (VtyEvent (V.EvKey V.KEsc [])) =
+    modify $ \s -> s { asScreen = MainMenuScreen }
+handleSettingsEvent (VtyEvent (V.EvKey V.KEnter [])) =
+    modify $ \s -> s { asScreen = MainMenuScreen }
+-- L toggles language
+handleSettingsEvent (VtyEvent (V.EvKey (V.KChar 'l') [])) = do
+    s <- get
+    let old = asSettings s
+        new = old { settingsLanguage = case settingsLanguage old of
+                        English -> Swedish
+                        Swedish -> English
+                  }
+    liftIO $ saveSettings new
+    modify $ \st -> st { asSettings = new }
+handleSettingsEvent _ = pure ()
 
 -- | Update SRS state for a vocabulary card after review
 -- 1. Get current state from asVocabStates (or initialize new)
