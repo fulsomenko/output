@@ -61,32 +61,46 @@ agentSystemPrompt persona task lang level mBrief = T.unlines $
 
     -- Global rules prepended to every task prompt.
     noRomanization =
-        [ "IMPORTANT: Never use romanization (Latin-letter transcriptions like"
-        , "'geu', 'neun', 'annyeonghaseyo'). Write all Korean in Hangul only."
-        , "The student must learn to read Hangul directly — romanization is a crutch."
+        [ "STRICT RULE — NO ROMANIZATION: Never write Korean sounds in Latin letters."
+        , "Do not write 'annyeonghaseyo', 'gamsahamnida', 'geu', 'neun', or any other"
+        , "romanized transcription. Write Korean in Hangul only, always."
+        , "This includes greetings, names, and parenthetical pronunciation hints."
+        , "WRONG: '안녕하세요 (annyeonghaseyo)'  RIGHT: '안녕하세요'"
         ]
 
     interfaceRules =
-        [ "INTERFACE: This is a terminal text chat. The student types via keyboard — there"
-        , "is NO handwriting, NO drawing, NO stroke order, NO physical writing whatsoever."
-        , "Never ask the student to 'write out' letters by hand or 'practice forming' shapes."
-        , "The student CAN type Korean characters (Hangul) directly in this interface."
-        , "Appropriate exercises: type a Korean word or sentence, read and translate,"
-        , "answer a vocabulary question, have a conversation, complete a sentence."
+        [ "INTERFACE: This is a terminal text chat. Input is via keyboard only."
+        , "There is NO handwriting, NO stroke order, NO physical writing."
+        , "Do not ask the student to 'write out' letters or 'practice forming shapes'."
+        , "The student CAN type Korean characters (Hangul) directly."
+        , "Good exercise types: type a Korean word, read and translate a sentence,"
+        , "answer a vocabulary question, complete a sentence, have a conversation."
         ]
 
     taskInstructions = noRomanization <> [""] <> interfaceRules <> [""] <> case task of
         AssessLevel ->
             [ "Task: Assess the student's Korean proficiency level (TOPIK 1-6)."
             , "The student's native language is " <> langName <> "."
-            , "- Begin with basics (can they read Hangul?) and increase difficulty"
-            , "- Test: Hangul recognition, vocabulary, grammar, reading comprehension"
+            , "- Ask one question at a time and wait for a response before continuing"
+            , "- Start simple (reading Hangul) and increase difficulty with each exchange"
             , "- Provide all explanations in " <> langName
-            , "- Ask one question at a time and wait for a response"
+            , ""
+            , "QUESTION DESIGN — follow these rules strictly:"
+            , "- NEVER put the answer inside the question itself."
+            , "  WRONG: 'What letter is this? (ㄱ)'  — the answer is right there."
+            , "  RIGHT: 'What sound does ㄱ make?' or 'What does 물 mean?'"
+            , "- Test comprehension and production, not visual pattern-matching."
+            , "- Good question types:"
+            , "  * Show a Korean word, ask for its meaning: '물 — what does this mean?'"
+            , "  * Ask the student to type a word: '\"water\" in Korean — type it for me'"
+            , "  * Show a sentence and ask for a translation"
+            , "  * Fill-in-the-blank: '저는 학생___. (I am a student.)'"
+            , "  * Ask what sound a consonant or vowel makes"
+            , ""
             , "- After 6-10 exchanges, conclude with EXACTLY this line (no variation):"
             , "  ASSESSMENT COMPLETE: TOPIK Level [1-6]"
             , "  Then explain the result in " <> langName
-            , "- Begin by greeting the student and explaining what you will do"
+            , "- Begin by greeting the student in Korean (Hangul only) and ask your first question"
             ]
         HaveConversation ->
             [ "Task: Have a Korean conversation with the student."
