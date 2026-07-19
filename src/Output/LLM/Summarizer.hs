@@ -9,52 +9,39 @@ import qualified Data.Text as T
 
 import Output.LLM.Client (OllamaConfig, OllamaMessage(..), callOllama)
 import Output.Domain.Settings (Language, showLanguage)
-import Output.Domain.StudentProfile (StudentProfile(..))
 
--- | Analyze a lesson conversation and return an updated student profile summary.
--- On first session mProfile is Nothing; subsequent sessions receive the existing
--- summary so the agent can refine and accumulate understanding over time.
+-- | Analyze one lesson conversation and return a session note (3-5 sentences).
+-- The note covers THIS session only — it is appended to the student's note log,
+-- never used to rewrite history. This guarantees no past observations are lost.
 summarizeSession
     :: OllamaConfig
     -> Language
-    -> [OllamaMessage]      -- Full session messages
-    -> Maybe StudentProfile -- Existing profile to update (Nothing = first session)
+    -> [OllamaMessage]    -- Full session conversation
     -> IO (Either Text Text)
-summarizeSession cfg lang msgs mProfile =
-    callOllama cfg sysPrompt [userMsg]
+summarizeSession cfg lang msgs =
+    callOllama cfg (summarizationPrompt lang) [userMsg]
   where
-    sysPrompt = summarizationPrompt lang mProfile
-    userMsg   = OllamaMessage { role = "user", content = formatConversation msgs }
+    userMsg = OllamaMessage { role = "user", content = formatConversation msgs }
 
-summarizationPrompt :: Language -> Maybe StudentProfile -> Text
-summarizationPrompt lang mProfile = T.unlines $
-    [ "You are a Korean language learning analyst tracking a student's long-term progress."
-    , "Analyze the lesson conversation below and write a standing student profile."
+summarizationPrompt :: Language -> Text
+summarizationPrompt lang = T.unlines
+    [ "You are a Korean language learning analyst."
+    , "Write a brief observation note about THIS specific lesson (3-5 sentences)."
     , ""
-    ] ++ previousBlock ++
-    [ "Write the updated profile in " <> showLanguage lang <> "."
-    , "Write it as if briefing a new teacher before their first lesson with this student."
-    , "Include in 4-6 sentences:"
-    , "- Current Korean ability level and what the student can or cannot yet do"
-    , "- Specific vocabulary items or grammar patterns they struggle with"
-    , "- Demonstrated strengths and areas of confidence"
-    , "- Goals, motivations, or real-world contexts they mentioned (travel, work, etc.)"
+    , "Include ALL of the following that apply:"
+    , "- What was practised in this session (vocabulary topic, grammar point, etc.)"
+    , "- Specific errors made — name the actual Korean words or grammar patterns"
+    , "- Improvements or breakthroughs compared to what the student attempted"
+    , "- Goals, motivations, or real-world contexts the student mentioned"
     , ""
     , "Rules:"
-    , "- Be specific and concrete — reference actual Korean words or patterns observed"
+    , "- Write in " <> showLanguage lang
+    , "- Be specific: cite Korean words (in Hangul) and grammar patterns you observed"
     , "- Write as a single flowing paragraph, not bullet points"
     , "- Do not start with 'The student' — vary your sentence openings"
-    , "- Do not reference 'the previous session' — write as a standing profile"
-    , "- Output ONLY the profile paragraph, nothing else"
+    , "- Describe only what happened in THIS session, not a cumulative profile"
+    , "- Output ONLY the paragraph, nothing else"
     ]
-  where
-    previousBlock = case mProfile of
-        Nothing -> []
-        Just p  ->
-            [ "Existing profile to refine (update and expand — do not simply repeat it):"
-            , spSummary p
-            , ""
-            ]
 
 formatConversation :: [OllamaMessage] -> Text
 formatConversation msgs = T.unlines $

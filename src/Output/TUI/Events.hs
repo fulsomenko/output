@@ -15,6 +15,7 @@ import qualified Graphics.Vty as V
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time (getCurrentTime, utcToLocalTime, utc, localDay, diffUTCTime)
+import Data.Time.Format (formatTime, defaultTimeLocale)
 import qualified Data.Map as Map
 
 import Output.TUI.Types
@@ -37,7 +38,7 @@ import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..
 import Output.Domain.Settings (AppSettings(..), Language(..), showLanguage)
 import Output.Repository.Json
     ( runJsonRepository, saveSettings, saveLearnedWord
-    , loadStudentProfile, saveStudentProfile
+    , loadStudentProfile, appendSessionNote
     )
 import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity, getAllActivities)
 import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..), ratingToQuality)
@@ -47,7 +48,7 @@ import Output.LLM.Agent (AgentTask(..), agentSystemPrompt, parseAssessmentLevel)
 import Output.LLM.Persona (Persona(..))
 import Output.LLM.Extractor (ExtractedWord(..), extractVocabFromConversation, isSpokenOccasion)
 import Output.LLM.Summarizer (summarizeSession)
-import Output.Domain.StudentProfile (StudentProfile(..))
+import Output.Domain.StudentProfile (StudentProfile(..), SessionNote(..))
 import qualified Data.Set as Set
 
 -- | Main event handler. The BChan is threaded through so LLM handlers
@@ -73,14 +74,21 @@ handleEvent chan ev = do
         SettingsScreen          -> handleSettingsEvent ev
         PersonaScreen           -> handlePersonaEvent ev
 
--- | Persist and store an incoming session summary produced by the summarizer agent.
+-- | Append an incoming session note to the student profile (disk + in-memory).
+-- The note log is append-only so no past observations are ever lost.
 handleSummaryEvent :: Text -> EventM Name AppState ()
-handleSummaryEvent summary = do
+handleSummaryEvent noteContent = do
     now <- liftIO getCurrentTime
     let localNow = utcToLocalTime utc now
-        profile  = StudentProfile { spSummary = summary, spLastUpdated = localNow }
-    liftIO $ saveStudentProfile profile
-    modify $ \st -> st { asStudentProfile = Just profile }
+        note     = SessionNote { snDate = localNow, snContent = noteContent }
+    liftIO $ appendSessionNote note
+    modify $ \st -> st
+        { asStudentProfile = Just $ case asStudentProfile st of
+            Nothing ->
+                StudentProfile { spNotes = [note], spLastUpdated = localNow }
+            Just p  ->
+                p { spNotes = spNotes p ++ [note], spLastUpdated = localNow }
+        }
 
 -- | Handle vocabulary words extracted from a lesson (screen-independent).
 handleExtractionEvent :: [ExtractedWord] -> EventM Name AppState ()
@@ -382,7 +390,7 @@ studentBrief s
                      (\l -> "TOPIK " <> T.pack (show l))
                      (settingsKoreanLevel settings)
     statsEmpty   = total == 0 && settingsKoreanLevel settings == Nothing
-    profileEmpty = null (asStudentProfile s)
+    profileEmpty = all (null . spNotes) (asStudentProfile s)
     statsLines =
         [ "TOPIK Level: " <> levelStr
         , "Vocabulary:   " <> T.pack (show total) <> " words"
@@ -391,9 +399,17 @@ studentBrief s
             <> " · " <> T.pack (show nLearning)     <> " Learning"
             <> " · " <> T.pack (show nNew)           <> " New)"
         ]
-    profileLines = case asStudentProfile s of
+    recentNotes = case asStudentProfile s of
         Nothing -> []
-        Just p  -> ["", spSummary p]
+        Just p  -> takeLast 5 (spNotes p)
+    takeLast n xs = drop (max 0 (length xs - n)) xs
+    profileLines
+        | null recentNotes = []
+        | otherwise =
+            "" : "Session history (oldest → newest):" : map formatNote recentNotes
+    formatNote note =
+        "[" <> T.pack (formatTime defaultTimeLocale "%Y-%m-%d" (snDate note)) <> "] "
+        <> snContent note
 
 -- | Open an AI lesson chat. Kicks off the AI's opening message immediately.
 startLLMLesson :: BChan AppEvent -> AgentTask -> EventM Name AppState ()
@@ -469,14 +485,13 @@ handleChatNormal chan (VtyEvent (V.EvKey V.KEsc [])) = do
             let settings = asSettings s
                 cfg      = ollamaFromSettings settings
                 lang     = settingsLanguage settings
-                mProfile = asStudentProfile s
                 oMsgs    = map (\m -> OllamaMessage (llmRole m) (llmContent m))
                                (llmMessages chat)
             liftIO $ void $ forkIO $ do
-                result <- summarizeSession cfg lang oMsgs mProfile
+                result <- summarizeSession cfg lang oMsgs
                 case result of
-                    Right summary -> writeBChan chan (LLMSummary summary)
-                    Left _        -> pure ()
+                    Right noteText -> writeBChan chan (LLMSummary noteText)
+                    Left _         -> pure ()
         _ -> pure ()
     modify $ \st -> st { asScreen = MainMenuScreen, asLLMChat = Nothing }
 handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'i') [])) =

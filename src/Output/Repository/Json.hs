@@ -13,6 +13,7 @@ module Output.Repository.Json
     , saveLearnedWord
     , loadStudentProfile
     , saveStudentProfile
+    , appendSessionNote
     ) where
 
 import Data.Aeson (decode, encode, FromJSON, ToJSON)
@@ -39,7 +40,7 @@ import Output.Domain.Types
 import Output.Domain.Activity (ActivityEntry(..))
 import Output.Domain.Progress (emptyUserProgress)
 import Output.Domain.Settings (AppSettings, defaultSettings)
-import Output.Domain.StudentProfile (StudentProfile)
+import Output.Domain.StudentProfile (StudentProfile(..), SessionNote(..))
 import Output.LLM.Extractor (ExtractedWord(..))
 import Output.Repository.Class
     ( ActivityRepository(..)
@@ -253,6 +254,17 @@ saveStudentProfile :: StudentProfile -> IO ()
 saveStudentProfile profile = do
     createDirectoryIfMissing True "data/user-data"
     BL.writeFile "data/user-data/student-profile.json" (encode profile)
+
+-- | Append a single session note to the student profile.
+-- Loads the existing profile (or creates a new one), appends the note, and saves.
+-- Notes are never removed or rewritten — information is only ever accumulated.
+appendSessionNote :: SessionNote -> IO ()
+appendSessionNote note = do
+    mProfile <- loadStudentProfile
+    let profile = case mProfile of
+            Nothing -> StudentProfile { spNotes = [note], spLastUpdated = snDate note }
+            Just p  -> p { spNotes = spNotes p ++ [note], spLastUpdated = snDate note }
+    saveStudentProfile profile
 
 -- | Persist a new AI-extracted word, assigning it an ID and deduplicating.
 -- Returns the saved card (with assigned ID), or Nothing if the word already exists.

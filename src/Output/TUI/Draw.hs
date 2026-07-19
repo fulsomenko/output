@@ -558,7 +558,8 @@ drawChatInput chat =
     inputLines = T.splitOn "\n" (llmInput chat)
     lineCount  = length inputLines
     renderLine i ln =
-        padRight Max $ txt $ if i == lineCount - 1 then ln <> cursor else ln
+        let content = if i == lineCount - 1 then ln <> cursor else ln
+        in padRight Max $ txt (if T.null content then " " else content)
     cursor = case llmInputMode chat of
         InsertMode -> "│"
         NormalMode -> ""
