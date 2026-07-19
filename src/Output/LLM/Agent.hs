@@ -55,14 +55,20 @@ agentSystemPrompt persona task lang level = T.unlines $
     langName = showLanguage lang
     levelStr = T.pack (show level)
 
-    taskInstructions = case task of
+    -- Global rule prepended to every task prompt.
+    noRomanization =
+        [ "IMPORTANT: Never use romanization (Latin-letter transcriptions like"
+        , "'annyeonghaseyo'). Write all Korean in Hangul only. The student must"
+        , "learn to read and write Hangul directly."
+        ]
+
+    taskInstructions = noRomanization <> [""] <> case task of
         AssessLevel ->
             [ "Task: Assess the student's Korean proficiency level (TOPIK 1-6)."
             , "The student's native language is " <> langName <> "."
             , "- Begin with basics (can they read Hangul?) and increase difficulty"
             , "- Test: Hangul recognition, vocabulary, grammar, reading comprehension"
             , "- Provide all explanations in " <> langName
-            , "- Show Korean with romanization in parentheses for new items"
             , "- Ask one question at a time and wait for a response"
             , "- After 6-10 exchanges, conclude with EXACTLY this line (no variation):"
             , "  ASSESSMENT COMPLETE: TOPIK Level [1-6]"
@@ -73,48 +79,47 @@ agentSystemPrompt persona task lang level = T.unlines $
             [ "Task: Have a Korean conversation with the student."
             , "The student is at TOPIK level " <> levelStr <> " and speaks " <> langName <> "."
             , "- Speak Korean at TOPIK " <> levelStr <> " difficulty"
-            , "- After each Korean phrase or sentence, add a " <> langName <> " translation in (parentheses)"
-            , "- Gently correct mistakes by showing: 'You said: X. Natural Korean: Y'"
+            , "- After each Korean sentence add a " <> langName <> " translation in (parentheses)"
+            , "- Gently correct mistakes by showing: '정정: X → Y' with " <> langName <> " note"
             , "- Suggest a topic if the student doesn't know what to say"
             , "- Keep the conversation encouraging and natural"
-            , "- Begin by greeting the student and proposing a topic to discuss"
+            , "- Begin by greeting the student in Korean and proposing a topic"
             ]
         GenerateVocabulary ->
             [ "Task: Teach 10 vocabulary words suited for TOPIK level " <> levelStr <> "."
             , "The student speaks " <> langName <> "."
             , "- Choose practical, high-frequency words for everyday use at this level"
             , "- Present each word in this format:"
-            , "  단어 (Word): [Korean]  /  [romanization]"
-            , "  뜻 (Meaning): [" <> langName <> " meaning]"
-            , "  예문 (Example): [Korean sentence]"
-            , "  뜻 (Translation): [" <> langName <> " translation]"
+            , "  단어: [Korean]"
+            , "  뜻: [" <> langName <> " meaning]"
+            , "  예문: [Korean example sentence]"
+            , "  번역: [" <> langName <> " translation of the example]"
             , "- After presenting all 10 words, ask if the student wants to practice any"
-            , "- Begin by announcing today's vocabulary topic"
+            , "- Begin by announcing today's vocabulary topic in Korean"
             ]
         GenerateSentences ->
             [ "Task: Teach 10 useful Korean sentences at TOPIK level " <> levelStr <> "."
             , "The student speaks " <> langName <> "."
             , "- Choose sentences useful for real situations at this level"
             , "- Present each sentence in this format:"
-            , "  Korean: [sentence]"
-            , "  Romanization: [romanization]"
+            , "  Korean: [sentence in Hangul]"
             , "  " <> langName <> ": [translation]"
             , "  Pattern: [grammar note on the key structure used]"
             , "- After presenting all sentences, offer to test the student on any of them"
-            , "- Begin by introducing the situation/theme of today's sentences"
+            , "- Begin by introducing the situation/theme of today's sentences in Korean"
             ]
         TeachGrammar ->
             [ "Task: Teach one Korean grammar point at TOPIK level " <> levelStr <> "."
             , "The student speaks " <> langName <> "."
             , "- Choose a grammar point important for TOPIK " <> levelStr
             , "- Structure the lesson as:"
-            , "  1. Grammar pattern and name"
+            , "  1. Grammar pattern in Korean"
             , "  2. Clear explanation in " <> langName
             , "  3. Five example sentences with " <> langName <> " translations"
             , "  4. Two common mistakes to avoid"
-            , "  5. A practice sentence for the student to complete"
+            , "  5. A practice sentence for the student to complete (in Korean)"
             , "- After the student responds to your practice exercise, give feedback"
-            , "- Begin by greeting the student and announcing the grammar topic"
+            , "- Begin by greeting the student in Korean and announcing the grammar topic"
             ]
 
 -- | Parse an assessment result from an AI response.

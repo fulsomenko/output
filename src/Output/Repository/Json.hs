@@ -9,6 +9,8 @@ module Output.Repository.Json
     , runJsonRepository
     , loadSettings
     , saveSettings
+    , loadLearnedWords
+    , saveLearnedWord
     ) where
 
 import Data.Aeson (decode, encode, FromJSON, ToJSON)
@@ -23,7 +25,7 @@ import System.FilePath ((</>))
 import Control.Monad
 
 import Output.Domain.Types
-    ( VocabularyId
+    ( VocabularyId(..)
     , VocabularyCard(..)
     , VocabularyState(..)
     , UserProgress
@@ -34,6 +36,7 @@ import Output.Domain.Types
 import Output.Domain.Activity (ActivityEntry(..))
 import Output.Domain.Progress (emptyUserProgress)
 import Output.Domain.Settings (AppSettings, defaultSettings)
+import Output.LLM.Extractor (ExtractedWord(..))
 import Output.Repository.Class
     ( ActivityRepository(..)
     , VocabularyRepository(..)
@@ -218,3 +221,39 @@ saveSettings :: AppSettings -> IO ()
 saveSettings settings = do
     createDirectoryIfMissing True "data/user-data"
     BL.writeFile "data/user-data/settings.json" (encode settings)
+
+-- | Load all AI-extracted vocabulary words from disk.
+loadLearnedWords :: IO [VocabularyCard]
+loadLearnedWords = do
+    let filePath = "data/user-data/learned-words.json"
+    exists <- doesFileExist filePath
+    if not exists
+        then pure []
+        else do
+            content <- BL.readFile filePath
+            pure $ maybe [] id (decode content)
+
+-- | Persist a new AI-extracted word, assigning it an ID and deduplicating.
+-- Returns the saved card (with assigned ID), or Nothing if the word already exists.
+saveLearnedWord :: TOPIK_Level -> ExtractedWord -> IO (Maybe VocabularyCard)
+saveLearnedWord level ew = do
+    existing <- loadLearnedWords
+    -- Dedup: skip if Korean text already in the list (from either source)
+    if ewKorean ew `elem` map korean existing
+        then pure Nothing
+        else do
+            let existingIds = map (\c -> let VocabularyId n = vocabId c in n) existing
+                maxId     = foldr max 100000 existingIds
+                nextId    = VocabularyId (maxId + 1)
+                newCard   = VocabularyCard
+                    { vocabId            = nextId
+                    , korean             = ewKorean ew
+                    , romanization       = ""
+                    , english            = [ewTranslation ew]
+                    , topicLevel         = level
+                    , exampleSentences   = [ewContext ew]
+                    , exampleTranslations = []
+                    }
+            createDirectoryIfMissing True "data/user-data"
+            BL.writeFile "data/user-data/learned-words.json" (encode (existing ++ [newCard]))
+            pure (Just newCard)

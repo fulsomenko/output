@@ -21,7 +21,7 @@ import Output.Domain.Exercise (ExercisePrompt(..))
 import Output.Domain.Types (TypingProgress, VocabularyState(..), MasteryLevel(..), ExerciseType(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
 import Output.Domain.Settings (AppSettings(..), showLanguage)
-import Output.LLM.Agent (AgentTask(..), taskLabel)
+import Output.LLM.Agent (taskLabel)
 import Output.LLM.Persona (personaName)
 import Output.TUI.Widgets.TypingPractice
 import Output.TUI.Widgets.Keyboard (KeyboardState(..), drawKeyboard)
@@ -533,8 +533,13 @@ drawLLMChat s chat =
                      , txtWrap (llmContent msg)
                      ]
             _ ->
-                hBox [ withAttr aiAttr $ txt (personaName (llmPersona chat) <> ": ")
-                     , txtWrap (llmContent msg)
+                vBox [ hBox [ withAttr aiAttr $ txt (personaName (llmPersona chat) <> ": ")
+                            , txtWrap (llmContent msg)
+                            ]
+                     , if llmIsSpoken msg
+                           then withAttr hintAttr $ txt
+                                "  [Native speaker practice — mark resolved with a real speaker]"
+                           else emptyWidget
                      ]
 
     drawStatus
@@ -550,8 +555,6 @@ drawChatInput chat =
     borderWithLabel (txt " Message ") $
     padAll 1 $ txt $ llmInput chat <> "│"
 
-takeLast :: Int -> [a] -> [a]
-takeLast n xs = drop (max 0 (length xs - n)) xs
 
 -- | Draw the settings screen.
 drawSettings :: AppState -> Widget Name

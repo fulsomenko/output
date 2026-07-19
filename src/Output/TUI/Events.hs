@@ -25,6 +25,7 @@ import Output.Domain.Types
     , VocabularyCard(..)
     , VocabularyState(..)
     , newVocabularyState
+    , TOPIK_Level(..)
     )
 import Output.Domain.Jamo (qwertyToJamo)
 import Output.Domain.TypingLevel (TypingLevel(..), mainLevels, getSubLevels, hasSubLevels)
@@ -32,13 +33,14 @@ import Output.Domain.TypingWord (TypingWord(..))
 import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), createSessionPrompts, validateTyping, CharStatus(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
 import Output.Domain.Settings (AppSettings(..), Language(..), showLanguage)
-import Output.Repository.Json (runJsonRepository, saveSettings)
+import Output.Repository.Json (runJsonRepository, saveSettings, saveLearnedWord)
 import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity, getAllActivities)
 import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..), ratingToQuality)
 import Output.Algorithm.SpacedRepetition (defaultSM2, applySRSResult)
 import Output.LLM.Client (callOllama, ollamaFromSettings, OllamaMessage(..))
 import Output.LLM.Agent (AgentTask(..), agentSystemPrompt, parseAssessmentLevel)
-import Output.LLM.Persona (teacherKim)
+import Output.LLM.Persona (Persona(..), teacherKim)
+import Output.LLM.Extractor (extractVocabFromConversation, isSpokenOccasion)
 import qualified Data.Set as Set
 
 -- | Main event handler. The BChan is threaded through so LLM handlers
@@ -326,14 +328,15 @@ endDrill = do
 startLLMLesson :: BChan AppEvent -> AgentTask -> EventM Name AppState ()
 startLLMLesson chan task = do
     s <- get
-    let settings = asSettings s
-        level    = fromMaybe 1 (settingsKoreanLevel settings)
-        chat     = initialLLMChatState task teacherKim
-        sysPrompt = agentSystemPrompt teacherKim task (settingsLanguage settings) level
+    let settings  = asSettings s
+        level     = fromMaybe 1 (settingsKoreanLevel settings)
+        persona   = Persona { personaName  = settingsPersonaName  settings
+                            , personaStyle = settingsPersonaStyle settings }
+        chat      = initialLLMChatState task persona
+        sysPrompt = agentSystemPrompt persona task (settingsLanguage settings) level
         cfg       = ollamaFromSettings settings
     put s { asScreen = LLMChatScreen, asLLMChat = Just chat, asMessage = Nothing }
     liftIO $ void $ forkIO $ do
-        -- Empty user message list → AI sends the opening greeting
         let openingMsg = OllamaMessage { role = "user", content = "[Begin lesson]" }
         result <- callOllama cfg sysPrompt [openingMsg]
         writeBChan chan (LLMResponse result)
@@ -341,7 +344,7 @@ startLLMLesson chan task = do
 -- | Handle events on the LLM chat screen.
 handleLLMChatEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
 -- Async response arrived from the background thread
-handleLLMChatEvent _ (AppEvent (LLMResponse result)) = do
+handleLLMChatEvent chan (AppEvent (LLMResponse result)) = do
     s <- get
     case asLLMChat s of
         Nothing   -> pure ()
@@ -350,7 +353,9 @@ handleLLMChatEvent _ (AppEvent (LLMResponse result)) = do
                 modify $ \st -> st
                     { asLLMChat = Just chat { llmWaiting = False, llmError = Just err } }
             Right resp -> do
-                let assistantMsg = LLMMessage { llmRole = "assistant", llmContent = resp }
+                let spoken       = isSpokenOccasion resp
+                    assistantMsg = LLMMessage { llmRole = "assistant", llmContent = resp
+                                              , llmIsSpoken = spoken }
                     newMsgs      = llmMessages chat ++ [assistantMsg]
                     detectedLevel = parseAssessmentLevel resp
                     newSettings   = case detectedLevel of
@@ -363,6 +368,33 @@ handleLLMChatEvent _ (AppEvent (LLMResponse result)) = do
                     , asSettings = newSettings
                     }
                 vScrollToEnd (viewportScroll ChatHistoryViewport)
+                -- Fork vocabulary extraction from the last exchange
+                let settings = asSettings s
+                    cfg      = ollamaFromSettings settings
+                    lang     = settingsLanguage settings
+                    oMsgs    = map (\m -> OllamaMessage (llmRole m) (llmContent m)) newMsgs
+                liftIO $ void $ forkIO $ do
+                    words <- extractVocabFromConversation cfg lang oMsgs
+                    case words of
+                        Right ws | not (null ws) -> writeBChan chan (LLMExtraction ws)
+                        _                        -> pure ()
+-- Extracted vocabulary arrived from background extraction agent
+handleLLMChatEvent _ (AppEvent (LLMExtraction words)) = do
+    s <- get
+    let level = maybe One intToLevel (settingsKoreanLevel (asSettings s))
+    newCards <- liftIO $ mapM (saveLearnedWord level) words
+    now <- liftIO getCurrentTime
+    let localNow  = utcToLocalTime utc now
+        saved     = [c | Just c <- newCards]
+    when (not $ null saved) $ do
+        let newVocabCards  = asVocabCards s ++ saved
+            initialStates  = map (\c -> (vocabId c, newVocabularyState (vocabId c) localNow)) saved
+            newVocabStates = foldr (\(vid, vs) m -> Map.insert vid vs m)
+                                   (asVocabStates s) initialStates
+        modify $ \st -> st
+            { asVocabCards  = newVocabCards
+            , asVocabStates = newVocabStates
+            }
 -- User submits a message
 handleLLMChatEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
     s <- get
@@ -373,7 +405,7 @@ handleLLMChatEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
             in if T.null input || llmWaiting chat
                then pure ()
                else do
-                    let userMsg  = LLMMessage { llmRole = "user", llmContent = input }
+                    let userMsg  = LLMMessage { llmRole = "user", llmContent = input, llmIsSpoken = False }
                         newMsgs  = llmMessages chat ++ [userMsg]
                         settings = asSettings s
                         level    = fromMaybe 1 (settingsKoreanLevel settings)
@@ -938,4 +970,17 @@ endTypingPractice = do
                     }
                 , asMessage = Just msg
                 }
+
+-- ---------------------------------------------------------------------------
+-- Helpers
+-- ---------------------------------------------------------------------------
+
+-- | Map a TOPIK level integer (1-6) to TOPIK_Level, defaulting to One.
+intToLevel :: Int -> TOPIK_Level
+intToLevel 2 = Two
+intToLevel 3 = Three
+intToLevel 4 = Four
+intToLevel 5 = Five
+intToLevel 6 = Six
+intToLevel _ = One
 

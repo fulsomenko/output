@@ -17,7 +17,7 @@ import System.Environment (lookupEnv)
 import Output.TUI.Types
 import Output.TUI.Draw (drawUI)
 import Output.TUI.Events (handleEvent)
-import Output.Repository.Json (runJsonRepository, loadSettings)
+import Output.Repository.Json (runJsonRepository, loadSettings, loadLearnedWords)
 import Output.Domain.Settings (AppSettings(..))
 import Output.Repository.Class
     ( getAllVocabCards
@@ -76,7 +76,9 @@ runTUI = do
     let now = utcToLocalTime utc utcNow
 
     -- Load all persisted data
-    cards         <- runJsonRepository getAllVocabCards
+    topikCards    <- runJsonRepository getAllVocabCards
+    learnedCards  <- loadLearnedWords
+    let cards = topikCards ++ learnedCards
     progress      <- runJsonRepository getProgress
     typingWords   <- loadAllTypingWords "data"
     typingProgress <- runJsonRepository getTypingProgress

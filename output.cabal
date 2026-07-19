@@ -39,6 +39,7 @@ library
         Output.LLM.Client
         Output.LLM.Persona
         Output.LLM.Agent
+        Output.LLM.Extractor
         Output.CLI
         Output.App
         Output.TUI.Types

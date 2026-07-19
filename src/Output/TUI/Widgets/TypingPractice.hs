@@ -15,10 +15,8 @@ module Output.TUI.Widgets.TypingPractice
 import Brick
 import Brick.Widgets.Border
 import Brick.Widgets.Center
-import qualified Graphics.Vty as V
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.List (intersperse)
 

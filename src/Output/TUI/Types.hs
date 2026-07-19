@@ -46,11 +46,8 @@ module Output.TUI.Types
     ) where
 
 import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Time (UTCTime, LocalTime)
 import Brick (AttrName, attrName)
 import GHC.Generics (Generic)
@@ -64,7 +61,8 @@ import Output.Domain.TypingWord (TypingWord)
 import Output.Domain.TypingExercise (TypingExerciseType, TypingPrompt, CharStatus)
 import Output.Domain.Settings (AppSettings, defaultSettings)
 import Output.LLM.Agent (AgentTask(..))
-import Output.LLM.Persona (Persona, teacherKim)
+import Output.LLM.Persona (Persona)
+import Output.LLM.Extractor (ExtractedWord)
 
 -- | Widget names for focus management
 data Name
@@ -176,7 +174,7 @@ data TypingState = TypingState
 
 -- | Create initial typing state
 initialTypingState :: TypingLevel -> TypingExerciseType -> [TypingPrompt] -> [TypingWord] -> TypingState
-initialTypingState level exType prompts words = TypingState
+initialTypingState level exType prompts twWords = TypingState
     { typLevel = level
     , typExerciseType = exType
     , typPrompts = prompts
@@ -187,7 +185,7 @@ initialTypingState level exType prompts words = TypingState
     , typStats = emptyTypingStats
     , typShowHints = True
     , typLastKeyCorrect = Nothing
-    , typWords = words
+    , typWords = twWords
     , typSelectedLevel = 1
     , typLevelSelectMode = TopLevelSelect
     , typSelectedIndex = 0
@@ -211,10 +209,11 @@ emptySessionStats now = SessionStats
     , ssSessionStart = now
     }
 
--- | A single message in an LLM conversation (role = "user" or "assistant").
+-- | A single message in an LLM conversation.
 data LLMMessage = LLMMessage
-    { llmRole    :: Text
-    , llmContent :: Text
+    { llmRole      :: Text
+    , llmContent   :: Text
+    , llmIsSpoken  :: Bool  -- True = AI requested spoken/listening practice
     } deriving (Show, Eq, Generic)
 
 -- | State for an active LLM chat session.
@@ -244,7 +243,8 @@ data PersonaEditField = PersonaEditName | PersonaEditStyle
 -- | Custom events for the application
 data AppEvent
     = Tick
-    | LLMResponse (Either Text Text)   -- Left = error, Right = assistant message
+    | LLMResponse   (Either Text Text)    -- Async reply from lesson AI
+    | LLMExtraction [ExtractedWord]       -- Vocabulary extracted from last turn
     deriving (Show, Eq)
 
 -- | Main application state
