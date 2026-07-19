@@ -72,9 +72,10 @@ callOllama cfg sysPrompt msgs = do
                 })
         req <- parseRequest url
         let req' = req
-                { method         = "POST"
-                , requestBody    = RequestBodyLBS body
-                , requestHeaders = [("Content-Type", "application/json")]
+                { method          = "POST"
+                , requestBody     = RequestBodyLBS body
+                , requestHeaders  = [("Content-Type", "application/json")]
+                , responseTimeout = responseTimeoutNone
                 }
         resp <- httpLbs req' manager
         case eitherDecode (responseBody resp) of
