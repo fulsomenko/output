@@ -7,6 +7,7 @@ module Output.TUI.Widgets.Keyboard
       -- * Drawing
     , drawKeyboard
     , drawKeyboardCompact
+    , drawKeyboardReference
       -- * Key Info
     , fingerColor
     , keyRow
@@ -176,3 +177,24 @@ jamoChar :: Jamo -> Char
 jamoChar (Consonant c) = c
 jamoChar (Vowel c) = c
 jamoChar (DoubleConsonant c) = c
+
+-- | Draw a QWERTY→Korean reference keyboard for chat screens.
+-- Each key shows the Latin letter above and the Korean jamo below.
+drawKeyboardReference :: Widget n
+drawKeyboardReference =
+    borderWithLabel (txt " QWERTY → 한글 ") $
+    padLeftRight 1 $
+    vBox
+        [ hCenter $ hBox $ map drawRefKey topRowLayout
+        , hCenter $ padLeft (Pad 2) $ hBox $ map drawRefKey homeRowLayout
+        , hCenter $ padLeft (Pad 4) $ hBox $ map drawRefKey bottomRowLayout
+        ]
+  where
+    drawRefKey (qwerty, jamo) =
+        padLeftRight 1 $
+        vBox
+            [ modifyDefAttr (\a -> a `V.withForeColor` V.brightBlack) $
+                txt (T.singleton qwerty)
+            , modifyDefAttr (\a -> a `V.withForeColor` V.cyan) $
+                txt (T.singleton $ jamoChar jamo)
+            ]

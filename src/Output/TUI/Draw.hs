@@ -24,6 +24,7 @@ import Output.Domain.Settings (AppSettings(..), showLanguage)
 import Output.LLM.Agent (AgentTask(..), taskLabel)
 import Output.LLM.Persona (personaName)
 import Output.TUI.Widgets.TypingPractice
+import Output.TUI.Widgets.Keyboard (drawKeyboardReference)
 import qualified Data.Map as Map
 
 -- | Main draw function
@@ -507,6 +508,7 @@ drawLLMChat s chat =
                 , padAll 1 drawStatus
                 ]
         , drawChatInput chat
+        , drawKeyboardReference
         , statusBar s "[Enter] Send  [Esc] Exit"
         ]
   where
