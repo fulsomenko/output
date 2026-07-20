@@ -73,12 +73,14 @@ agentSystemPrompt persona task lang level mBrief = T.unlines $
         , "RULE 3 — TEXT CHAT ONLY. No handwriting, stroke order, or 'write out' tasks."
         , "The student types Korean directly on a keyboard."
         , ""
-        , "RULE 4 — NEVER RE-TEST KNOWLEDGE THE STUDENT JUST DEMONSTRATED."
-        , "If you asked the student to TYPE or WRITE a Korean word, the meaning was in your prompt."
-        , "Do NOT then ask for the English translation of that same word."
-        , "WRONG: 'Type the Korean for water.' → student types 물 → 'What does 물 mean?'"
-        , "WRONG: 'Spell hello in Korean.' → student types 안녕하세요 → 'What does 안녕하세요 mean?'"
-        , "RIGHT: acknowledge the result, correct any errors, then ask about a DIFFERENT word."
+        , "RULE 4 — AFTER A TYPING TASK, NEVER ASK THE MEANING OF THE WORD JUST TYPED."
+        , "Saying 'Type the Korean for water' uses the English word 'water' in YOUR message."
+        , "The student already knows what water means — that is why they could type 물."
+        , "Asking 'What does 물 mean?' immediately after tests nothing new. It is noise."
+        , "WRONG: You say 'Type the Korean for water.' Student types 물. You ask 'What does 물 mean?'"
+        , "WRONG: You say 'Spell hello in Korean.' Student types 안녕하세요. You ask 'What does 안녕하세요 mean?'"
+        , "RIGHT: You say 'Type the Korean for water.' Student types 물. You say '잘 했어요! Now, type the Korean word for book.'"
+        , "After a correct response move IMMEDIATELY to a different word or a different question type."
         ]
 
     interfaceRules =

@@ -561,7 +561,8 @@ drawLLMChat s chat =
 drawChatInput :: LLMChatState -> Widget Name
 drawChatInput chat =
     borderWithLabel (modeLabel <+> txt " Message ") $
-    padAll 1 $
+    vCenter $
+    padLeftRight 1 $
     vBox (zipWith renderLine [0..] inputLines)
   where
     inputLines = T.splitOn "\n" (llmInput chat)
