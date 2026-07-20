@@ -43,7 +43,7 @@ import Output.Repository.Json
 import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity, getAllActivities)
 import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..), ratingToQuality)
 import Output.Algorithm.SpacedRepetition (defaultSM2, applySRSResult)
-import Output.LLM.Client (callOllama, ollamaFromSettings, OllamaMessage(..))
+import Output.LLM.Client (streamOllama, ollamaFromSettings, OllamaMessage(..))
 import Output.LLM.Agent (AgentTask(..), agentSystemPrompt, parseAssessmentLevel)
 import Output.LLM.Persona (Persona(..))
 import Output.LLM.Extractor (ExtractedWord(..), extractVocabFromConversation, isSpokenOccasion)
@@ -426,8 +426,10 @@ startLLMLesson chan task = do
     put s { asScreen = LLMChatScreen, asLLMChat = Just chat, asMessage = Nothing }
     liftIO $ void $ forkIO $ do
         let openingMsg = OllamaMessage { role = "user", content = "[Begin lesson]" }
-        result <- callOllama cfg sysPrompt [openingMsg]
-        writeBChan chan (LLMResponse result)
+        result <- streamOllama cfg sysPrompt [openingMsg] (\tok -> writeBChan chan (LLMToken tok))
+        case result of
+            Left err   -> writeBChan chan (LLMStreamError err)
+            Right full -> writeBChan chan (LLMStreamDone full)
 
 -- | Handle events on the LLM chat screen.
 -- Async events are mode-independent; key events are routed by llmInputMode.
@@ -466,6 +468,50 @@ handleLLMChatEvent chan (AppEvent (LLMResponse result)) = do
                     case extracted of
                         Right ws | not (null ws) -> writeBChan chan (LLMExtraction ws)
                         _                        -> pure ()
+-- Streaming token arrived: append to partial buffer and scroll
+handleLLMChatEvent _ (AppEvent (LLMToken tok)) = do
+    modify $ \s -> case asLLMChat s of
+        Nothing   -> s
+        Just chat -> s { asLLMChat = Just chat
+            { llmPartial = Just (fromMaybe "" (llmPartial chat) <> tok) } }
+    vScrollToEnd (viewportScroll ChatHistoryViewport)
+-- Stream complete: commit partial to messages, clear streaming state, run post-processing
+handleLLMChatEvent chan (AppEvent (LLMStreamDone fullText)) = do
+    s <- get
+    case asLLMChat s of
+        Nothing   -> pure ()
+        Just chat -> do
+            let spoken        = isSpokenOccasion fullText
+                assistantMsg  = LLMMessage { llmRole = "assistant", llmContent = fullText
+                                           , llmIsSpoken = spoken }
+                newMsgs       = llmMessages chat ++ [assistantMsg]
+                detectedLevel = parseAssessmentLevel fullText
+                newSettings   = case detectedLevel of
+                    Nothing  -> asSettings s
+                    Just lvl -> (asSettings s) { settingsKoreanLevel = Just lvl }
+            when (isJust detectedLevel) $
+                liftIO $ saveSettings newSettings
+            modify $ \st -> st
+                { asLLMChat  = Just chat { llmMessages = newMsgs
+                                         , llmWaiting  = False
+                                         , llmPartial  = Nothing }
+                , asSettings = newSettings
+                }
+            vScrollToEnd (viewportScroll ChatHistoryViewport)
+            let cfg   = ollamaFromSettings (asSettings s)
+                lang  = settingsLanguage (asSettings s)
+                oMsgs = map (\m -> OllamaMessage (llmRole m) (llmContent m)) newMsgs
+            liftIO $ void $ forkIO $ do
+                extracted <- extractVocabFromConversation cfg lang oMsgs
+                case extracted of
+                    Right ws | not (null ws) -> writeBChan chan (LLMExtraction ws)
+                    _                        -> pure ()
+-- Stream error: clear streaming state, show error
+handleLLMChatEvent _ (AppEvent (LLMStreamError err)) =
+    modify $ \s -> case asLLMChat s of
+        Nothing   -> s
+        Just chat -> s { asLLMChat = Just chat
+            { llmWaiting = False, llmPartial = Nothing, llmError = Just err } }
 -- Route key events by input mode
 handleLLMChatEvent chan ev = do
     s <- get
@@ -570,8 +616,10 @@ sendChatMessage chan = do
                             }
                         }
                     liftIO $ void $ forkIO $ do
-                        res <- callOllama cfg sysPrompt oMsgs
-                        writeBChan chan (LLMResponse res)
+                        res <- streamOllama cfg sysPrompt oMsgs (\tok -> writeBChan chan (LLMToken tok))
+                        case res of
+                            Left err   -> writeBChan chan (LLMStreamError err)
+                            Right full -> writeBChan chan (LLMStreamDone full)
 
 -- | Handle settings screen events.
 handleSettingsEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()

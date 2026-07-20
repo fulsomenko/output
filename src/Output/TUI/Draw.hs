@@ -516,7 +516,7 @@ drawLLMChat s chat =
         [ borderWithLabel (withAttr titleAttr $ txt " Conversation ") $
             viewport ChatHistoryViewport Vertical $
             padAll 1 $
-            vBox (map drawMsg (llmMessages chat) ++ [drawStatus])
+            vBox (map drawMsg (llmMessages chat) ++ partialWidget ++ [drawStatus])
         , drawChatInput chat
         ]
         ++ (if llmShowKeyboard chat then [drawKeyboard chatKeyboardState] else [])
@@ -542,8 +542,17 @@ drawLLMChat s chat =
                            else emptyWidget
                      ]
 
+    partialWidget = case llmPartial chat of
+        Nothing -> []
+        Just t  ->
+            [ padBottom (Pad 1) $
+              hBox [ withAttr aiAttr $ txt (personaName (llmPersona chat) <> ": ")
+                   , txtWrap t
+                   ]
+            ]
+
     drawStatus
-        | llmWaiting chat =
+        | llmWaiting chat && llmPartial chat == Nothing =
             withAttr hintAttr $ txt $ "⟳ " <> personaName (llmPersona chat) <> " is thinking..."
         | otherwise = case llmError chat of
             Just err -> withAttr incorrectAttr $ txtWrap $ "Error: " <> err

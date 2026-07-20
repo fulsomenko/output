@@ -225,6 +225,7 @@ data LLMChatState = LLMChatState
     , llmMessages     :: [LLMMessage]
     , llmInput        :: Text
     , llmWaiting      :: Bool         -- True while waiting for Ollama
+    , llmPartial      :: Maybe Text   -- Nothing = pre-stream; Just t = streaming in progress
     , llmError        :: Maybe Text   -- Last error from Ollama, if any
     , llmInputMode    :: InputMode    -- Normal (navigate) or Insert (type)
     , llmShowKeyboard :: Bool         -- Whether to show the keyboard reference
@@ -237,6 +238,7 @@ initialLLMChatState task persona = LLMChatState
     , llmMessages     = []
     , llmInput        = ""
     , llmWaiting      = True    -- AI sends the opening message immediately
+    , llmPartial      = Nothing
     , llmError        = Nothing
     , llmInputMode    = NormalMode
     , llmShowKeyboard = True
@@ -253,7 +255,10 @@ data PersonaEditField = PersonaEditName | PersonaEditStyle
 -- | Custom events for the application
 data AppEvent
     = Tick
-    | LLMResponse   (Either Text Text)    -- Async reply from lesson AI
+    | LLMResponse   (Either Text Text)    -- Async reply from lesson AI (non-streaming, kept for compat)
+    | LLMToken      Text                  -- Incremental streaming token from Ollama
+    | LLMStreamDone Text                  -- Stream complete; carries full accumulated text
+    | LLMStreamError Text                 -- Stream failed; carries error message
     | LLMExtraction [ExtractedWord]       -- Vocabulary extracted from last turn
     | LLMSummary    Text                  -- Session summary from summarization agent
     deriving (Show, Eq)

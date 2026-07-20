@@ -60,7 +60,7 @@ applyEnvOverrides s = do
 runTUI :: IO ()
 runTUI = do
     -- Create channel for async events (LLM responses etc.)
-    chan <- newBChan 10
+    chan <- newBChan 100
 
     -- Build the Brick app, closing over the channel so event handlers can use it
     let mkApp = App
