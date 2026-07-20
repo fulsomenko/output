@@ -540,10 +540,14 @@ handleChatNormal chan (VtyEvent (V.EvKey V.KEsc [])) = do
                     Left _         -> pure ()
         _ -> pure ()
     modify $ \st -> st { asScreen = MainMenuScreen, asLLMChat = Nothing }
-handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'i') [])) =
+handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'i') [])) = do
     modify $ \s -> case asLLMChat s of
         Nothing -> s
         Just c  -> s { asLLMChat = Just c { llmInputMode = InsertMode } }
+    vty <- getVtyHandle
+    liftIO $ do
+        (w, h) <- V.displayBounds (V.outputIface vty)
+        V.update vty $ V.picForImage $ V.backgroundFill w h
 handleChatNormal _ (VtyEvent (V.EvKey (V.KChar 'K') [])) = do
     modify $ \s -> case asLLMChat s of
         Nothing -> s
@@ -567,10 +571,14 @@ handleChatNormal _ _ = pure ()
 
 -- | Insert mode: typing, backspace, newline, return to normal.
 handleChatInsert :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
-handleChatInsert _ (VtyEvent (V.EvKey V.KEsc [])) =
+handleChatInsert _ (VtyEvent (V.EvKey V.KEsc [])) = do
     modify $ \s -> case asLLMChat s of
         Nothing -> s
         Just c  -> s { asLLMChat = Just c { llmInputMode = NormalMode } }
+    vty <- getVtyHandle
+    liftIO $ do
+        (w, h) <- V.displayBounds (V.outputIface vty)
+        V.update vty $ V.picForImage $ V.backgroundFill w h
 handleChatInsert _ (VtyEvent (V.EvKey V.KEnter [])) =
     modify $ \s -> case asLLMChat s of
         Nothing -> s
