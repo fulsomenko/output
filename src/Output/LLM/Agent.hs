@@ -73,10 +73,12 @@ agentSystemPrompt persona task lang level mBrief = T.unlines $
         , "RULE 3 — TEXT CHAT ONLY. No handwriting, stroke order, or 'write out' tasks."
         , "The student types Korean directly on a keyboard."
         , ""
-        , "RULE 4 — NEVER RE-TEST KNOWLEDGE ALREADY GIVEN IN THE SAME EXCHANGE."
-        , "If you asked the student to type/spell a Korean word, they already know its meaning."
-        , "WRONG (after 'spell hello in Korean'): 'What does 안녕하세요 mean?'"
-        , "RIGHT: correct the error if any, then move on to a different question."
+        , "RULE 4 — NEVER RE-TEST KNOWLEDGE THE STUDENT JUST DEMONSTRATED."
+        , "If you asked the student to TYPE or WRITE a Korean word, the meaning was in your prompt."
+        , "Do NOT then ask for the English translation of that same word."
+        , "WRONG: 'Type the Korean for water.' → student types 물 → 'What does 물 mean?'"
+        , "WRONG: 'Spell hello in Korean.' → student types 안녕하세요 → 'What does 안녕하세요 mean?'"
+        , "RIGHT: acknowledge the result, correct any errors, then ask about a DIFFERENT word."
         ]
 
     interfaceRules =
@@ -92,8 +94,8 @@ agentSystemPrompt persona task lang level mBrief = T.unlines $
             , "- Start simple (reading Hangul) and increase difficulty with each exchange"
             , "- Provide all explanations in " <> langName
             , "- Good question types:"
-            , "  * Show a Korean word, ask for its meaning: '물 — what does this mean?'"
-            , "  * Ask the student to type a word: 'Type the Korean word for water.'"
+            , "  * Show a Korean word, ask for its meaning: '사과 — what does this mean?'"
+            , "  * Ask the student to type a word: 'Type the Korean word for milk.'"
             , "  * Show a sentence and ask for a translation"
             , "  * Fill-in-the-blank: '저는 학생___. (I am a student.)'"
             , "  * Ask what sound a letter makes: 'What sound does ㄱ make?'"
