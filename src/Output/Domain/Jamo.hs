@@ -287,10 +287,10 @@ composeJamoSequence = go Empty T.empty
         -- Has complete syllable (initial + medial)
         (HasSyllable initial medial, _) | isConsonant j && canBeFinal j ->
             go (HasFinal initial medial j) acc js
-        (HasSyllable initial medial, _) | isConsonant j ->
+        (HasSyllable _ _, _) | isConsonant j ->
             -- This consonant can't be a final, emit syllable and start new
             go (HasInitial j) (acc <> renderState state) js
-        (HasSyllable initial medial, _) | isVowel j ->
+        (HasSyllable _ _, _) | isVowel j ->
             -- Vowel after complete syllable - emit and this vowel stands alone
             go Empty (acc <> renderState state <> T.singleton (getJamoChar j)) js
 
@@ -301,7 +301,7 @@ composeJamoSequence = go Empty T.empty
                     Just c -> T.singleton c
                     Nothing -> T.pack [getJamoChar initial, getJamoChar medial]
             in go (HasSyllable final j) (acc <> completeSyllable) js
-        (HasFinal initial medial final, _) | isConsonant j ->
+        (HasFinal _ _ _, _) | isConsonant j ->
             -- Another consonant: emit current syllable, new consonant is initial
             go (HasInitial j) (acc <> renderState state) js
 

@@ -22,7 +22,6 @@ module Output.Domain.TypingExercise
     ) where
 
 import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Aeson (FromJSON, ToJSON)
 import GHC.Generics (Generic)
 
@@ -100,10 +99,10 @@ createSessionPrompts exType = map (createTypingPrompt exType)
 
 -- | Validate typing progress, returning status for each expected jamo
 validateTyping :: [Jamo] -> [Jamo] -> [CharStatus]
-validateTyping expected typed = zipStatuses 0 expected typed
+validateTyping expected typed = zipStatuses (0 :: Int) expected typed
   where
     zipStatuses _ [] _ = []
-    zipStatuses idx (e:es) [] = Pending : zipStatuses (idx + 1) es []
+    zipStatuses idx (_:es) [] = Pending : zipStatuses (idx + 1) es []
     zipStatuses idx (e:es) (t:ts)
         | e == t    = Correct : zipStatuses (idx + 1) es ts
         | otherwise = Incorrect : zipStatuses (idx + 1) es ts

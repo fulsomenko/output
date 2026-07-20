@@ -11,12 +11,10 @@ module Output.Domain.Session
     ) where
 
 import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Time (LocalTime, diffLocalTime, nominalDiffTimeToSeconds)
 import Data.Aeson (FromJSON, ToJSON)
 import GHC.Generics (Generic)
 
-import Output.Domain.Types (ExerciseType)
 import Output.Domain.Exercise (ExercisePrompt(..), ExerciseResult(..))
 
 -- | A practice session containing multiple exercises

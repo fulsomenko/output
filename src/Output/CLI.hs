@@ -13,9 +13,8 @@ import System.IO (hFlush, stdout)
 import Text.Read (readMaybe)
 
 import Output.Domain.Types
-import Output.Domain.Progress (emptyUserProgress)
 import Output.Domain.Exercise
-import Output.Repository.Json (JsonRepository(..), runJsonRepository)
+import Output.Repository.Json (runJsonRepository)
 import Output.Repository.Class
 
 -- | Run the CLI application

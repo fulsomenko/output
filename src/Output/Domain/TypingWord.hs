@@ -14,7 +14,6 @@ module Output.Domain.TypingWord
     ) where
 
 import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Aeson (FromJSON(..), ToJSON, eitherDecodeFileStrict, withObject, (.:))

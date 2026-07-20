@@ -72,6 +72,11 @@ agentSystemPrompt persona task lang level mBrief = T.unlines $
         , ""
         , "RULE 3 — TEXT CHAT ONLY. No handwriting, stroke order, or 'write out' tasks."
         , "The student types Korean directly on a keyboard."
+        , ""
+        , "RULE 4 — NEVER RE-TEST KNOWLEDGE ALREADY GIVEN IN THE SAME EXCHANGE."
+        , "If you asked the student to type/spell a Korean word, they already know its meaning."
+        , "WRONG (after 'spell hello in Korean'): 'What does 안녕하세요 mean?'"
+        , "RIGHT: correct the error if any, then move on to a different question."
         ]
 
     interfaceRules =

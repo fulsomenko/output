@@ -35,10 +35,10 @@ import Output.Domain.TypingLevel (TypingLevel(..), mainLevels, getSubLevels, has
 import Output.Domain.TypingWord (TypingWord(..))
 import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), createSessionPrompts, validateTyping, CharStatus(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
-import Output.Domain.Settings (AppSettings(..), Language(..), showLanguage)
+import Output.Domain.Settings (AppSettings(..), Language(..))
 import Output.Repository.Json
     ( runJsonRepository, saveSettings, saveLearnedWord
-    , loadStudentProfile, appendSessionNote
+    , appendSessionNote
     )
 import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity, getAllActivities)
 import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..), ratingToQuality)
@@ -604,8 +604,8 @@ handlePersonaEvent (VtyEvent (V.EvKey (V.KChar 'n') [])) = do
     modify $ \st -> st { asPersonaEdit = Just (PersonaEditName, name) }
 handlePersonaEvent (VtyEvent (V.EvKey (V.KChar 't') [])) = do
     s <- get
-    let style = settingsPersonaStyle (asSettings s)
-    modify $ \st -> st { asPersonaEdit = Just (PersonaEditStyle, style) }
+    let editStyle = settingsPersonaStyle (asSettings s)
+    modify $ \st -> st { asPersonaEdit = Just (PersonaEditStyle, editStyle) }
 -- While editing: character input, backspace, enter to confirm, esc to cancel
 handlePersonaEvent (VtyEvent (V.EvKey (V.KChar c) [])) =
     modify $ \s -> case asPersonaEdit s of
@@ -751,15 +751,15 @@ handleQuitEvent _ = pure ()
 startTypingPractice :: EventM Name AppState ()
 startTypingPractice = do
     s <- get
-    let words = asTypingWords s
-    if null words
+    let vocabWords = asTypingWords s
+    if null vocabWords
         then modify $ \st -> st { asMessage = Just "No typing vocabulary loaded!" }
         else do
             -- Create initial typing state for level selection
             case headMay mainLevels of
                 Nothing -> modify $ \st -> st { asMessage = Just "Error loading levels" }
                 Just level -> do
-                    let ts = initialTypingState level Echo [] words
+                    let ts = initialTypingState level Echo [] vocabWords
                     modify $ \st -> st
                         { asScreen = TypingLevelSelectScreen
                         , asTyping = Just ts

@@ -16,23 +16,20 @@ module Output.Repository.Json
     , appendSessionNote
     ) where
 
-import Data.Aeson (decode, encode, FromJSON, ToJSON)
+import Data.Aeson (decode, encode)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as BLC
-import Data.Map (Map, fromList, toList)
-import qualified Data.Map as Map
-import Data.Time (LocalTime, localDay, getCurrentTime, utcToLocalTime, utc)
-import Data.Maybe (mapMaybe, catMaybes)
+import Data.Map (fromList, toList)
+import Data.Time (localDay, getCurrentTime, utcToLocalTime, utc)
+import Data.Maybe (mapMaybe, listToMaybe)
 import System.Directory (doesFileExist, createDirectoryIfMissing)
 import System.FilePath ((</>))
 import Control.Monad
 
 import Output.Domain.Types
     ( VocabularyId(..)
-    , WordClass(..)
     , VocabularyCard(..)
     , VocabularyState(..)
-    , UserProgress
     , TypingProgress(..)
     , emptyTypingProgress
     , TOPIK_Level(..)
@@ -72,9 +69,9 @@ instance ActivityRepository JsonRepository where
         activities <- unJsonRepository getAllActivities
         pure $ filter (\a -> localDay (actDate a) == localDay targetDate) activities
 
-    getActivitiesByVocab vocabId = JsonRepository $ do
+    getActivitiesByVocab vid = JsonRepository $ do
         activities <- unJsonRepository getAllActivities
-        pure $ filter (\a -> actVocabularyId a == Just vocabId) activities
+        pure $ filter (\a -> actVocabularyId a == Just vid) activities
 
     getActivitiesInRange startDate endDate = JsonRepository $ do
         activities <- unJsonRepository getAllActivities
@@ -94,7 +91,7 @@ instance ActivityRepository JsonRepository where
                 pure (parseActivitiesFromJsonl content)
 
 instance VocabularyRepository JsonRepository where
-    saveVocabState state = JsonRepository $ do
+    saveVocabState _ = JsonRepository $ do
         createDirectoryIfMissing True "data/user-data"
         states <- unJsonRepository getAllVocabStates
         let statesList = toList states
@@ -109,7 +106,7 @@ instance VocabularyRepository JsonRepository where
                 content <- BL.readFile filePath
                 case decode content of
                     Just (states :: [(VocabularyId, VocabularyState)]) ->
-                        pure (if null states then Nothing else Just (snd (head states)))
+                        pure (fmap snd (listToMaybe states))
                     Nothing -> pure Nothing
 
     getAllVocabStates = JsonRepository $ do

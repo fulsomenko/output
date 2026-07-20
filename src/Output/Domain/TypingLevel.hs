@@ -327,7 +327,7 @@ newKeysAtLevel n = case getLevel n of
 -- | Check if a level is unlocked based on previous level stats
 isLevelUnlocked :: Int -> Maybe LevelStats -> Bool
 isLevelUnlocked 1 _ = True  -- Level 1 always unlocked
-isLevelUnlocked n Nothing = False  -- No stats = locked
+isLevelUnlocked _ Nothing = False  -- No stats = locked
 isLevelUnlocked n (Just stats) =
     case getLevel (n - 1) of
         Nothing -> False

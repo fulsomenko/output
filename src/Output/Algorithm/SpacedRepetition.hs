@@ -14,15 +14,12 @@ module Output.Algorithm.SpacedRepetition
     , updateMasteryLevel
     ) where
 
-import Data.Time (LocalTime, localDay, addDays)
-import Data.Time (LocalTime(..))
+import Data.Time (LocalTime(..), addDays)
 import GHC.Generics (Generic)
 
 import Output.Domain.Types
-    ( VocabularyId(..)
-    , VocabularyState(..)
+    ( VocabularyState(..)
     , MasteryLevel(..)
-    , defaultEaseFactor
     , newVocabularyState
     )
 import Output.Algorithm.SRS
@@ -63,7 +60,7 @@ instance SRSAlgorithm SM2 where
             -- Interval calculation based on quality
             newInterval = case quality of
                 Again -> 1  -- Reset to 1 day on failure
-                Hard  -> max 1 (ceiling (fromIntegral oldInterval * 1.2))
+                Hard  -> max 1 (ceiling (fromIntegral oldInterval * (1.2 :: Double)))
                 Good  -> if oldInterval == 0
                          then 1
                          else if oldInterval == 1
@@ -147,9 +144,9 @@ calculateIntervalDays reviewCount correctRate
     | reviewCount == 1 && correctRate < 0.7 = 1
     | otherwise =
         let easeFactor = 2.5 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
-            baseInterval = if reviewCount <= 1 then 1 else 3
+            baseInterval = (if reviewCount <= 1 then 1 else 3) :: Integer
             quality = min 5.0 (max 0.0 (correctRate * 5))
-        in max 1 (ceiling (fromIntegral baseInterval * easeFactor))
+        in max 1 (ceiling (fromIntegral baseInterval * easeFactor :: Double))
 
 -- | Determine mastery level based on correct/total reviews
 -- Legacy function - prefer using SRSAlgorithm typeclass
