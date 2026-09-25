@@ -53,6 +53,7 @@ drawUI s = [ui]
             Nothing   -> drawMainMenu s
         SettingsScreen -> drawSettings s
         PersonaScreen  -> drawPersonaScreen s
+        ModelSelectScreen -> drawModelSelect s
 
 -- | Shared status bar shown at the bottom of every screen
 statusBar :: AppState -> Text -> Widget Name
@@ -594,7 +595,7 @@ drawSettings s =
             , padTop (Pad 1) $ row "Ollama model" (settingsOllamaModel settings)
             ]
         , fill ' '
-        , statusBar s "[L] Toggle language  [P] Persona  [Esc] Back"
+        , statusBar s "[L] Toggle language  [M] Model  [P] Persona  [Esc] Back"
         ]
   where
     settings = asSettings s
@@ -603,6 +604,31 @@ drawSettings s =
         , withAttr statsAttr $ txt value
         ]
     padRight' n t = t <> T.replicate (max 0 (n - T.length t)) " "
+
+-- | Draw the Ollama model selection screen, listing models fetched live from the host.
+drawModelSelect :: AppState -> Widget Name
+drawModelSelect s =
+    withBorderStyle unicodeBold $
+    borderWithLabel (withAttr titleAttr $ txt " Select Ollama Model ") $
+    vBox
+        [ padAll 2 body
+        , fill ' '
+        , statusBar s "[↑/↓] Navigate  [Enter] Select  [Esc] Back"
+        ]
+  where
+    body
+        | asOllamaModelsLoading s = withAttr hintAttr $ txt "Fetching models from Ollama host..."
+        | Just err <- asOllamaModelsError s = withAttr incorrectAttr $ txtWrap err
+        | null (asOllamaModels s) = withAttr hintAttr $ txt "No models found on this host."
+        | otherwise = vBox $ zipWith (drawModelItem (asOllamaModelIndex s) currentModel) [0..] (asOllamaModels s)
+    currentModel = settingsOllamaModel (asSettings s)
+
+drawModelItem :: Int -> Text -> Int -> Text -> Widget Name
+drawModelItem selected currentModel idx name
+    | selected == idx = withAttr menuSelectedAttr $ hBox [txt " → ", txt name, activeTag]
+    | otherwise        = withAttr menuAttr $ hBox [txt "   ", txt name, activeTag]
+  where
+    activeTag = if name == currentModel then withAttr hintAttr (txt "  (active)") else emptyWidget
 
 -- | Draw the persona customisation screen.
 drawPersonaScreen :: AppState -> Widget Name

@@ -37,7 +37,7 @@ instance FromJSON AppSettings where
         <$> o .:  "settingsLanguage"
         <*> o .:? "settingsKoreanLevel"
         <*> (o .:? "settingsOllamaHost"   .!= "http://localhost:11434")
-        <*> (o .:? "settingsOllamaModel"  .!= "gemma3:4b")
+        <*> (o .:? "settingsOllamaModel"  .!= "qwen2.5:7b")
         <*> (o .:? "settingsPersonaName"  .!= defaultPersonaName)
         <*> (o .:? "settingsPersonaStyle" .!= defaultPersonaStyle)
 
@@ -54,7 +54,7 @@ defaultSettings = AppSettings
     { settingsLanguage     = English
     , settingsKoreanLevel  = Nothing
     , settingsOllamaHost   = "http://localhost:11434"
-    , settingsOllamaModel  = "gemma3:4b"
+    , settingsOllamaModel  = "qwen2.5:7b"
     , settingsPersonaName  = defaultPersonaName
     , settingsPersonaStyle = defaultPersonaStyle
     }

@@ -8,6 +8,7 @@ module Output.LLM.Client
     , ollamaFromSettings
     , callOllama
     , streamOllama
+    , listModels
     ) where
 
 import Control.Exception (try, SomeException)
@@ -19,7 +20,10 @@ import qualified Data.Text as T
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.Text.Encoding as TE
+import qualified Data.Text.Encoding.Error as TE
 import Network.HTTP.Client
+import Network.HTTP.Types.Status (statusIsSuccessful, statusCode)
 import GHC.Generics (Generic)
 
 import Output.Domain.Settings (AppSettings(..))
@@ -71,6 +75,13 @@ instance FromJSON OllamaStreamChunk where
         done <- o .: "done"
         pure OllamaStreamChunk { chunkContent = cnt, chunkDone = done }
 
+-- | Error body Ollama sends instead of a chat stream, e.g. an unpulled model.
+newtype OllamaErrorResponse = OllamaErrorResponse Text
+
+instance FromJSON OllamaErrorResponse where
+    parseJSON = withObject "OllamaErrorResponse" $ \o ->
+        OllamaErrorResponse <$> o .: "error"
+
 -- | Stream a chat request to Ollama token by token.
 -- Calls onToken for each non-empty content delta.
 -- Returns Left on error, Right with the full accumulated text on success.
@@ -100,12 +111,25 @@ streamOllama cfg sysPrompt msgs onToken = do
                 , responseTimeout = responseTimeoutNone
                 }
         withResponse req' manager $ \resp ->
-            drainBody acc (responseBody resp) ""
+            if statusIsSuccessful (responseStatus resp)
+                then drainBody acc (responseBody resp) ""
+                else do
+                    errBody <- brReadAll (responseBody resp) ""
+                    pure $ Left $ "Ollama error (" <> T.pack (show (statusCode (responseStatus resp)))
+                        <> "): " <> describeErrorBody errBody
+
+    brReadAll reader acc' = do
+        bytes <- brRead reader
+        if BS.null bytes then pure acc' else brReadAll reader (acc' <> bytes)
+
+    describeErrorBody raw = case eitherDecode (BL.fromStrict raw) of
+        Right (OllamaErrorResponse msg) -> msg
+        Left _                          -> TE.decodeUtf8With TE.lenientDecode raw
 
     drainBody acc reader buf = do
         bytes <- brRead reader
         if BS.null bytes
-            then Right <$> readIORef acc
+            then pure $ Left "Ollama stream ended unexpectedly (no response received)"
             else do
                 let combined         = buf <> bytes
                     endsWithNewline  = BS.last combined == 10
@@ -114,29 +138,69 @@ streamOllama cfg sysPrompt msgs onToken = do
                         if endsWithNewline then (ls, "")
                         else if null ls    then ([], combined)
                         else                    (init ls, last ls)
-                isDone <- processLines acc complete
-                if isDone
-                    then Right <$> readIORef acc
-                    else drainBody acc reader left
+                result <- processLines acc complete
+                case result of
+                    Left err    -> pure $ Left err
+                    Right True  -> Right <$> readIORef acc
+                    Right False -> drainBody acc reader left
 
-    -- Returns True when a chunk with done=true is encountered (logical end of stream).
-    -- Do not rely solely on brRead returning empty: Ollama may not close the HTTP
-    -- connection immediately after the final chunk, causing brRead to block.
-    processLines _   []     = pure False
+    -- Returns Right True when a chunk with done=true is encountered (logical end of
+    -- stream), Right False to keep reading, or Left on an error chunk. Do not rely
+    -- solely on brRead returning empty: Ollama may not close the HTTP connection
+    -- immediately after the final chunk, causing brRead to block.
+    processLines _   []     = pure (Right False)
     processLines acc (l:ls) = do
-        done <- processLine acc l
-        if done then pure True else processLines acc ls
+        result <- processLine acc l
+        case result of
+            Right False -> processLines acc ls
+            other       -> pure other
 
     processLine acc line
-        | BS.null line = pure False
+        | BS.null line = pure (Right False)
         | otherwise    = case eitherDecode (BL.fromStrict line) of
-            Left _      -> pure False  -- skip stats/malformed chunks
             Right chunk -> do
                 let delta = chunkContent chunk
                 unless (T.null delta) $ do
                     modifyIORef acc (<> delta)
                     onToken delta
-                pure (chunkDone chunk)
+                pure (Right (chunkDone chunk))
+            Left _ -> case eitherDecode (BL.fromStrict line) of
+                Right (OllamaErrorResponse msg) -> pure (Left ("Ollama error: " <> msg))
+                Left _                          -> pure (Right False) -- skip stats/malformed chunks
+
+-- | A model entry as reported by Ollama's /api/tags.
+newtype OllamaModelInfo = OllamaModelInfo Text
+
+instance FromJSON OllamaModelInfo where
+    parseJSON = withObject "OllamaModelInfo" $ \o ->
+        OllamaModelInfo <$> o .: "name"
+
+newtype OllamaTagsResponse = OllamaTagsResponse [OllamaModelInfo]
+
+instance FromJSON OllamaTagsResponse where
+    parseJSON = withObject "OllamaTagsResponse" $ \o ->
+        OllamaTagsResponse <$> o .: "models"
+
+-- | List model names available on the configured Ollama host.
+listModels :: OllamaConfig -> IO (Either Text [Text])
+listModels cfg = do
+    result <- try go
+    case result of
+        Left (ex :: SomeException) ->
+            pure $ Left $ "Ollama connection failed: " <> T.pack (show ex)
+        Right v -> pure v
+  where
+    go = do
+        manager <- newManager defaultManagerSettings
+        let url = T.unpack (ollamaHost cfg) <> "/api/tags"
+        req  <- parseRequest url
+        resp <- httpLbs req manager
+        if statusIsSuccessful (responseStatus resp)
+            then case eitherDecode (responseBody resp) of
+                Left e -> pure $ Left $ "Bad Ollama response: " <> T.pack e
+                Right (OllamaTagsResponse models) ->
+                    pure $ Right [name | OllamaModelInfo name <- models]
+            else pure $ Left $ "Ollama error (" <> T.pack (show (statusCode (responseStatus resp))) <> ")"
 
 -- | Send a chat request to Ollama. System prompt is prepended as a system message.
 -- Returns Left with error description on failure.

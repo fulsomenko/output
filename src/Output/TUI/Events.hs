@@ -43,7 +43,7 @@ import Output.Repository.Json
 import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity, getAllActivities)
 import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..), ratingToQuality)
 import Output.Algorithm.SpacedRepetition (defaultSM2, applySRSResult)
-import Output.LLM.Client (streamOllama, ollamaFromSettings, OllamaMessage(..))
+import Output.LLM.Client (streamOllama, ollamaFromSettings, OllamaMessage(..), listModels)
 import Output.LLM.Agent (AgentTask(..), agentSystemPrompt, parseAssessmentLevel)
 import Output.LLM.Persona (Persona(..))
 import Output.LLM.Extractor (ExtractedWord(..), extractVocabFromConversation, isSpokenOccasion)
@@ -58,6 +58,7 @@ import qualified Data.Set as Set
 handleEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
 handleEvent _ (AppEvent (LLMSummary summary))      = handleSummaryEvent summary
 handleEvent _ (AppEvent (LLMExtraction extracted)) = handleExtractionEvent extracted
+handleEvent _ (AppEvent (OllamaModelsLoaded result)) = handleModelsLoadedEvent result
 handleEvent chan ev = do
     s <- get
     case asScreen s of
@@ -71,8 +72,9 @@ handleEvent chan ev = do
         HelpScreen              -> handleHelpEvent ev
         QuitConfirmScreen       -> handleQuitEvent ev
         LLMChatScreen           -> handleLLMChatEvent chan ev
-        SettingsScreen          -> handleSettingsEvent ev
+        SettingsScreen          -> handleSettingsEvent chan ev
         PersonaScreen           -> handlePersonaEvent ev
+        ModelSelectScreen       -> handleModelSelectEvent ev
 
 -- | Append an incoming session note to the student profile (disk + in-memory).
 -- The note log is append-only so no past observations are ever lost.
@@ -630,13 +632,13 @@ sendChatMessage chan = do
                             Right full -> writeBChan chan (LLMStreamDone full)
 
 -- | Handle settings screen events.
-handleSettingsEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
-handleSettingsEvent (VtyEvent (V.EvKey V.KEsc [])) =
+handleSettingsEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
+handleSettingsEvent _ (VtyEvent (V.EvKey V.KEsc [])) =
     modify $ \s -> s { asScreen = MainMenuScreen }
-handleSettingsEvent (VtyEvent (V.EvKey V.KEnter [])) =
+handleSettingsEvent _ (VtyEvent (V.EvKey V.KEnter [])) =
     modify $ \s -> s { asScreen = MainMenuScreen }
 -- L toggles language
-handleSettingsEvent (VtyEvent (V.EvKey (V.KChar 'l') [])) = do
+handleSettingsEvent _ (VtyEvent (V.EvKey (V.KChar 'l') [])) = do
     s <- get
     let old = asSettings s
         new = old { settingsLanguage = case settingsLanguage old of
@@ -645,9 +647,58 @@ handleSettingsEvent (VtyEvent (V.EvKey (V.KChar 'l') [])) = do
                   }
     liftIO $ saveSettings new
     modify $ \st -> st { asSettings = new }
-handleSettingsEvent (VtyEvent (V.EvKey (V.KChar 'p') [])) =
+handleSettingsEvent _ (VtyEvent (V.EvKey (V.KChar 'p') [])) =
     modify $ \s -> s { asScreen = PersonaScreen }
-handleSettingsEvent _ = pure ()
+-- M opens the model selector, fetching the live list from the configured host
+handleSettingsEvent chan (VtyEvent (V.EvKey (V.KChar 'm') [])) = do
+    s <- get
+    let cfg = ollamaFromSettings (asSettings s)
+    modify $ \st -> st
+        { asScreen              = ModelSelectScreen
+        , asOllamaModelsLoading = True
+        , asOllamaModelsError   = Nothing
+        , asOllamaModelIndex    = 0
+        }
+    liftIO $ void $ forkIO $ do
+        result <- listModels cfg
+        writeBChan chan (OllamaModelsLoaded result)
+handleSettingsEvent _ _ = pure ()
+
+-- | Handle the async result of fetching /api/tags from the Ollama host.
+-- Runs unconditionally: the user may have navigated away before it arrives.
+handleModelsLoadedEvent :: Either Text [Text] -> EventM Name AppState ()
+handleModelsLoadedEvent result = modify $ \s -> case result of
+    Left err -> s
+        { asOllamaModelsLoading = False
+        , asOllamaModelsError   = Just err
+        , asOllamaModels        = []
+        }
+    Right models -> s
+        { asOllamaModelsLoading = False
+        , asOllamaModelsError   = Nothing
+        , asOllamaModels        = models
+        , asOllamaModelIndex    = fromMaybe 0 $
+            lookup (settingsOllamaModel (asSettings s)) (zip models [0..])
+        }
+
+-- | Handle model selection screen events.
+handleModelSelectEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+handleModelSelectEvent (VtyEvent (V.EvKey V.KEsc [])) =
+    modify $ \s -> s { asScreen = SettingsScreen }
+handleModelSelectEvent (VtyEvent (V.EvKey V.KUp [])) =
+    modify $ \s -> s { asOllamaModelIndex = max 0 (asOllamaModelIndex s - 1) }
+handleModelSelectEvent (VtyEvent (V.EvKey V.KDown [])) =
+    modify $ \s -> s
+        { asOllamaModelIndex = min (length (asOllamaModels s) - 1) (asOllamaModelIndex s + 1) }
+handleModelSelectEvent (VtyEvent (V.EvKey V.KEnter [])) = do
+    s <- get
+    case drop (asOllamaModelIndex s) (asOllamaModels s) of
+        (chosen:_) -> do
+            let new = (asSettings s) { settingsOllamaModel = chosen }
+            liftIO $ saveSettings new
+            modify $ \st -> st { asSettings = new, asScreen = SettingsScreen }
+        [] -> pure ()
+handleModelSelectEvent _ = pure ()
 
 -- | Handle persona screen events.
 handlePersonaEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()

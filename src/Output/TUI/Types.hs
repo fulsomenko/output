@@ -92,6 +92,7 @@ data Screen
     | LLMChatScreen
     | SettingsScreen
     | PersonaScreen
+    | ModelSelectScreen
     deriving (Show, Eq)
 
 -- | Mode of the drill exercise
@@ -261,6 +262,7 @@ data AppEvent
     | LLMStreamError Text                 -- Stream failed; carries error message
     | LLMExtraction [ExtractedWord]       -- Vocabulary extracted from last turn
     | LLMSummary    Text                  -- Session summary from summarization agent
+    | OllamaModelsLoaded (Either Text [Text]) -- Result of querying the Ollama host for available models
     deriving (Show, Eq)
 
 -- | Main application state
@@ -286,6 +288,11 @@ data AppState = AppState
     , asSettings      :: AppSettings                    -- Language, level, Ollama config
     , asPersonaEdit   :: Maybe (PersonaEditField, Text) -- Active persona field edit
     , asStudentProfile :: Maybe StudentProfile          -- Cumulative student brief
+    -- Ollama model selection (queried live from the configured host)
+    , asOllamaModels        :: [Text]       -- Model names last fetched from the host
+    , asOllamaModelIndex    :: Int          -- Selected index in asOllamaModels
+    , asOllamaModelsLoading :: Bool         -- True while a fetch is in flight
+    , asOllamaModelsError   :: Maybe Text   -- Error from the last fetch attempt, if any
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -312,6 +319,10 @@ initialAppState = AppState
     , asSettings       = defaultSettings
     , asPersonaEdit    = Nothing
     , asStudentProfile = Nothing
+    , asOllamaModels        = []
+    , asOllamaModelIndex    = 0
+    , asOllamaModelsLoading = False
+    , asOllamaModelsError   = Nothing
     }
 
 -- | Attribute names for styling
