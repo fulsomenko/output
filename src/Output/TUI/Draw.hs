@@ -14,8 +14,15 @@ import Data.Text (Text)
 import Output.TUI.Types
 import Output.Domain.Exercise (ExercisePrompt(..))
 import Output.Domain.Types (TypingProgress, VocabularyState(..), MasteryLevel(..))
+import Output.Domain.Sentence
+    ( Sentence(..), SentenceVersion(..), QuestState(..), QuestPhase(..)
+    , getLatestVersion, getBuiltChunks, getCurrentInput, getTypedJamo
+    )
+import Output.Domain.Jamo (allConsonants, allVowels, allDoubleConsonants)
 import Output.TUI.Widgets.TypingPractice
+import Output.TUI.Widgets.Keyboard (drawKeyboard, KeyboardState(..))
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 -- | Main draw function
 drawUI :: AppState -> [Widget Name]
@@ -35,6 +42,10 @@ drawUI s = [ui]
         ProgressScreen -> drawProgress s
         HelpScreen -> drawHelp
         QuitConfirmScreen -> drawQuitConfirm
+        SentenceQuestScreen -> case asQuestState s of
+            Just qs -> drawSentenceQuest s qs
+            Nothing -> drawMainMenu s
+        SentenceListScreen -> drawSentenceList s
 
 -- | Draw main menu
 drawMainMenu :: AppState -> Widget Name
@@ -57,7 +68,8 @@ drawMenuItems :: AppState -> Widget Name
 drawMenuItems s = vBox $ zipWith (drawMenuItem (asMenuIndex s)) [0..] menuOptions
   where
     menuOptions =
-        [ ("Typing Practice", "Learn Korean keyboard with guided levels")
+        [ ("Sentence Quest", "Build Korean sentences word by word")
+        , ("Typing Practice", "Learn Korean keyboard with guided levels")
         , ("Typing Drill", "Practice typing Korean words")
         , ("Reading Drill", "Read Korean and self-grade")
         , ("Writing Drill", "Translate English to Korean")
@@ -285,4 +297,116 @@ drawLevelSelectScreen ts progress =
         [ center $ drawLevelSelector ts progress
         , hBorder
         , padTop (Pad 1) $ hCenter $ txt "[↑/↓] Navigate | [Enter] Select | [Esc] Back"
+        ]
+
+-- | Draw sentence quest screen
+drawSentenceQuest :: AppState -> QuestState -> Widget Name
+drawSentenceQuest s qs =
+    withBorderStyle unicodeBold $
+    borderWithLabel (withAttr titleAttr $ txt " Sentence Quest ") $
+    vBox
+        [ -- Korean keyboard at the top
+          padAll 1 $ hCenter $ drawKeyboard keyboardState
+        , hBorder
+        , padAll 2 $ drawQuestContent qs
+        , hBorder
+        , padAll 1 $ drawQuestControls qs
+        -- Debug message
+        , case asMessage s of
+            Just msg -> hBorder <=> padAll 1 (withAttr hintAttr $ txt msg)
+            Nothing -> emptyWidget
+        ]
+  where
+    -- All keys available, no highlighting for freeform input
+    allJamo = Set.unions [allConsonants, allVowels, allDoubleConsonants]
+    keyboardState = KeyboardState
+        { ksAvailableKeys = allJamo
+        , ksNextKey = Nothing
+        , ksLastKeyState = Nothing
+        }
+
+-- | Draw quest content based on phase
+drawQuestContent :: QuestState -> Widget Name
+drawQuestContent qs = case questPhase qs of
+    EnteringEnglish -> vBox
+        [ center $ withAttr promptAttr $ txt "Enter an English sentence to learn:"
+        , padTop (Pad 2) $ center $ hLimit 60 $
+            withBorderStyle unicode $
+            borderWithLabel (txt " English ") $
+            padAll 1 $ txt $ getCurrentInput qs <> "│"
+        ]
+
+    BuildingKorean -> vBox
+        [ -- Show the English sentence
+          center $ withAttr promptAttr $ txt "English:"
+        , center $ withAttr hintAttr $ txt $ questEnglish qs
+        , padTop (Pad 2) $ hBorder
+        , padTop (Pad 1) $ center $ txt "Build the Korean translation:"
+        , padTop (Pad 1) $ center $ drawChunks (getBuiltChunks qs)
+        , padTop (Pad 2) $ center $ hLimit 40 $
+            withBorderStyle unicode $
+            borderWithLabel (txt " Next word ") $
+            padAll 1 $ txt $ getCurrentInput qs <> "│"
+        -- Debug: show what getCurrentInput returns
+        , padTop (Pad 1) $ center $ txt $ "Input: [" <> getCurrentInput qs <> "]"
+        , center $ txt $ "Jamo count: " <> T.pack (show (length (getTypedJamo qs)))
+        ]
+
+    Validating -> vBox
+        [ center $ withAttr promptAttr $ txt "Review your translation:"
+        , padTop (Pad 2) $ center $ vBox
+            [ txt "English:"
+            , withAttr hintAttr $ txt $ questEnglish qs
+            ]
+        , padTop (Pad 1) $ center $ vBox
+            [ txt "Korean:"
+            , withAttr correctAttr $ txt $ T.intercalate " " $ getBuiltChunks qs
+            ]
+        , padTop (Pad 2) $ center $ withAttr promptAttr $ txt "Is this correct?"
+        ]
+
+-- | Draw the built chunks
+drawChunks :: [Text] -> Widget Name
+drawChunks [] = withAttr chunkPendingAttr $ txt "[...]"
+drawChunks chunks = hBox $ map drawChunk chunks ++ [withAttr chunkPendingAttr $ txt " [...]"]
+  where
+    drawChunk c = withAttr chunkAttr $ txt $ "[" <> c <> "] "
+
+-- | Draw quest controls based on phase
+drawQuestControls :: QuestState -> Widget Name
+drawQuestControls qs = hCenter $ case questPhase qs of
+    EnteringEnglish -> txt "[Enter] Start building Korean | [Esc] Cancel"
+    BuildingKorean -> txt "[Enter] Add word | [Space] Finish | [Backspace] Undo last | [Esc] Cancel"
+    Validating -> txt "[y] Save | [n] Edit more | [Esc] Cancel"
+
+-- | Draw sentence list screen
+drawSentenceList :: AppState -> Widget Name
+drawSentenceList s =
+    withBorderStyle unicodeBold $
+    borderWithLabel (withAttr titleAttr $ txt " Your Sentences ") $
+    padAll 2 $ vBox
+        [ if null (asSentences s)
+            then center $ vBox
+                [ txt "No sentences yet!"
+                , padTop (Pad 1) $ withAttr hintAttr $ txt "Press [n] to create your first sentence"
+                ]
+            else vBox $ zipWith (drawSentenceItem (asSentenceListIndex s)) [0..] (asSentences s)
+        , hBorder
+        , padTop (Pad 1) $ hCenter $ txt "[n] New | [Enter] Practice | [v] View versions | [Esc] Back"
+        ]
+
+-- | Draw a sentence list item
+drawSentenceItem :: Int -> Int -> Sentence -> Widget Name
+drawSentenceItem selectedIdx idx sentence
+    | selectedIdx == idx = withAttr menuSelectedAttr $ hBox
+        [ txt " → "
+        , txt $ sentenceEnglish sentence
+        , txt " | "
+        , txt $ maybe "" svKorean (getLatestVersion sentence)
+        ]
+    | otherwise = withAttr menuAttr $ hBox
+        [ txt "   "
+        , txt $ sentenceEnglish sentence
+        , txt " | "
+        , txt $ maybe "" svKorean (getLatestVersion sentence)
         ]

@@ -5,7 +5,8 @@ module Output.CLI
     ) where
 
 import System.Environment (getArgs)
-import Data.Time (getCurrentTime, utcToLocalTime, utc)
+import Data.Time (utcToLocalTime, utc)
+import qualified Data.Time as Time
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -110,7 +111,7 @@ countByMastery states = MasteryStats
 -- | Get next exercises due for review
 nextExercises :: IO ()
 nextExercises = do
-    now <- utcToLocalTime utc <$> getCurrentTime
+    now <- utcToLocalTime utc <$> Time.getCurrentTime
     dueWords <- runJsonRepository $ getWordsForReview now
     if null dueWords
         then putStrLn "No exercises due! You're all caught up."

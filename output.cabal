@@ -28,6 +28,7 @@ library
         Output.Domain.TypingLevel
         Output.Domain.TypingWord
         Output.Domain.TypingExercise
+        Output.Domain.Sentence
         Output.Repository.Class
         Output.Repository.Json
         Output.Repository.Memory

@@ -5,9 +5,10 @@ module Output.Repository.Class
     , VocabularyRepository(..)
     , UserProgressRepository(..)
     , TypingProgressRepository(..)
+    , SentenceRepository(..)
     ) where
 
-import Data.Time (LocalTime)
+import Data.Time (LocalTime, UTCTime)
 import Data.Map (Map)
 import Output.Domain.Types
     ( VocabularyId
@@ -18,6 +19,7 @@ import Output.Domain.Types
     , TOPIK_Level
     )
 import Output.Domain.Activity (ActivityEntry)
+import Output.Domain.Sentence (Sentence, SentenceId)
 
 -- | Repository for activity logging
 class Monad m => ActivityRepository m where
@@ -77,3 +79,20 @@ class Monad m => TypingProgressRepository m where
 
     -- | Mark a level as completed
     markLevelCompleted :: Int -> m ()
+
+-- | Repository for user-created sentences
+class Monad m => SentenceRepository m where
+    -- | Get all sentences
+    getAllSentences :: m [Sentence]
+
+    -- | Get a sentence by ID
+    getSentence :: SentenceId -> m (Maybe Sentence)
+
+    -- | Save a sentence (creates or updates)
+    saveSentence :: Sentence -> m ()
+
+    -- | Generate a new unique sentence ID
+    nextSentenceId :: m SentenceId
+
+    -- | Get current UTC time
+    getCurrentTime :: m UTCTime

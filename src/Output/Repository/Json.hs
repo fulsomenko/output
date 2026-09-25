@@ -14,7 +14,8 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as BLC
 import Data.Map (Map, fromList, toList)
 import qualified Data.Map as Map
-import Data.Time (LocalTime, localDay, getCurrentTime, utcToLocalTime, utc)
+import Data.Time (LocalTime, localDay, utcToLocalTime, utc)
+import qualified Data.Time as Time
 import Data.Maybe (mapMaybe, catMaybes)
 import System.Directory (doesFileExist, createDirectoryIfMissing)
 import System.FilePath ((</>))
@@ -36,7 +37,9 @@ import Output.Repository.Class
     , VocabularyRepository(..)
     , UserProgressRepository(..)
     , TypingProgressRepository(..)
+    , SentenceRepository(..)
     )
+import Output.Domain.Sentence (Sentence(..), SentenceId(..))
 import qualified Data.Set as Set
 
 -- | JSON-based repository implementation
@@ -164,7 +167,7 @@ instance UserProgressRepository JsonRepository where
     getProgress = JsonRepository $ do
         let filePath = "data/user-data/user-progress.json"
         exists <- doesFileExist filePath
-        now <- utcToLocalTime utc <$> getCurrentTime
+        now <- utcToLocalTime utc <$> Time.getCurrentTime
         if not exists
             then pure (emptyUserProgress now)
             else do
@@ -198,3 +201,37 @@ instance TypingProgressRepository JsonRepository where
         progress <- unJsonRepository getTypingProgress
         let newProgress = progress { tpCompletedLevels = Set.insert levelNum (tpCompletedLevels progress) }
         unJsonRepository $ saveTypingProgress newProgress
+
+instance SentenceRepository JsonRepository where
+    getAllSentences = JsonRepository $ do
+        let filePath = "data/user-data/sentences.json"
+        exists <- doesFileExist filePath
+        if not exists
+            then pure []
+            else do
+                content <- BL.readFile filePath
+                case decode content of
+                    Just sentences -> pure sentences
+                    Nothing -> pure []
+
+    getSentence targetId = JsonRepository $ do
+        sentences <- unJsonRepository getAllSentences
+        pure $ find (\s -> sentenceId s == targetId) sentences
+      where
+        find _ [] = Nothing
+        find p (x:xs) = if p x then Just x else find p xs
+
+    saveSentence sentence = JsonRepository $ do
+        createDirectoryIfMissing True "data/user-data"
+        sentences <- unJsonRepository getAllSentences
+        let updated = sentence : filter (\s -> sentenceId s /= sentenceId sentence) sentences
+        BL.writeFile "data/user-data/sentences.json" (encode updated)
+
+    nextSentenceId = JsonRepository $ do
+        sentences <- unJsonRepository getAllSentences
+        let maxId = if null sentences
+                    then 0
+                    else maximum $ map (\s -> let SentenceId n = sentenceId s in n) sentences
+        pure $ SentenceId (maxId + 1)
+
+    getCurrentTime = JsonRepository Time.getCurrentTime

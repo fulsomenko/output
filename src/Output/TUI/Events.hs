@@ -9,7 +9,8 @@ import Control.Monad.IO.Class (liftIO)
 import Brick
 import qualified Graphics.Vty as V
 import qualified Data.Text as T
-import Data.Time (getCurrentTime, utcToLocalTime, utc)
+import Data.Time (utcToLocalTime, utc)
+import qualified Data.Time as Time
 import qualified Data.Map as Map
 
 import Output.TUI.Types
@@ -28,7 +29,13 @@ import Output.Domain.TypingWord (TypingWord(..))
 import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), createSessionPrompts, validateTyping, CharStatus(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
 import Output.Repository.Json (runJsonRepository)
-import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity)
+import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity, saveSentence, nextSentenceId, getAllSentences, getCurrentTime)
+import Output.Domain.Sentence
+    ( QuestState(..), QuestPhase(..)
+    , emptyQuestState, startChunkEntry, addChunk, addJamo, removeLastJamo
+    , removeLastChunk, setCurrentInput, getCurrentInput, finishChunkEntry
+    , confirmValidation, isReadyForValidation, getTypedJamo
+    )
 import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..))
 import Output.Algorithm.SpacedRepetition (defaultSM2, applySRSResult)
 import qualified Data.Set as Set
@@ -45,6 +52,8 @@ handleEvent ev = do
         ProgressScreen -> handleProgressEvent ev
         HelpScreen -> handleHelpEvent ev
         QuitConfirmScreen -> handleQuitEvent ev
+        SentenceQuestScreen -> handleSentenceQuestEvent ev
+        SentenceListScreen -> handleSentenceListEvent ev
 
 -- | Handle menu events
 handleMenuEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
@@ -57,19 +66,20 @@ handleMenuEvent (VtyEvent (V.EvKey V.KUp [])) =
 handleMenuEvent (VtyEvent (V.EvKey (V.KChar 'k') [])) =
     modify $ \s -> s { asMenuIndex = max 0 (asMenuIndex s - 1) }
 handleMenuEvent (VtyEvent (V.EvKey V.KDown [])) =
-    modify $ \s -> s { asMenuIndex = min 6 (asMenuIndex s + 1) }
+    modify $ \s -> s { asMenuIndex = min 7 (asMenuIndex s + 1) }
 handleMenuEvent (VtyEvent (V.EvKey (V.KChar 'j') [])) =
-    modify $ \s -> s { asMenuIndex = min 6 (asMenuIndex s + 1) }
+    modify $ \s -> s { asMenuIndex = min 7 (asMenuIndex s + 1) }
 handleMenuEvent (VtyEvent (V.EvKey V.KEnter [])) = do
     s <- get
     case asMenuIndex s of
-        0 -> startTypingPractice     -- Learn keyboard with levels (start here!)
-        1 -> startDrill TypingMode   -- Typing drill
-        2 -> startDrill ReadingMode  -- Reading drill
-        3 -> startDrill WritingMode  -- Writing drill (most advanced)
-        4 -> modify $ \st -> st { asScreen = ProgressScreen }
-        5 -> modify $ \st -> st { asScreen = HelpScreen }
-        6 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
+        0 -> startSentenceQuest      -- Sentence Quest (new feature!)
+        1 -> startTypingPractice     -- Learn keyboard with levels
+        2 -> startDrill TypingMode   -- Typing drill
+        3 -> startDrill ReadingMode  -- Reading drill
+        4 -> startDrill WritingMode  -- Writing drill (most advanced)
+        5 -> modify $ \st -> st { asScreen = ProgressScreen }
+        6 -> modify $ \st -> st { asScreen = HelpScreen }
+        7 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
         _ -> pure ()
 handleMenuEvent (VtyEvent (V.EvKey (V.KChar '?') [])) =
     modify $ \s -> s { asScreen = HelpScreen }
@@ -272,7 +282,7 @@ updateCardSRS vocabId' quality exType = do
     s <- get
 
     -- Get current time
-    utcNow <- liftIO getCurrentTime
+    utcNow <- liftIO Time.getCurrentTime
     let now = utcToLocalTime utc utcNow
 
     -- Get or initialize vocabulary state
@@ -671,4 +681,148 @@ endTypingPractice = do
                     }
                 , asMessage = Just msg
                 }
+
+-- | Start sentence quest - show list or start new
+startSentenceQuest :: EventM Name AppState ()
+startSentenceQuest = do
+    -- Load saved sentences
+    sentences <- liftIO $ runJsonRepository getAllSentences
+    modify $ \s -> s
+        { asScreen = SentenceListScreen
+        , asSentences = sentences
+        , asSentenceListIndex = 0
+        }
+
+-- | Handle sentence list screen events
+handleSentenceListEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+handleSentenceListEvent (VtyEvent (V.EvKey V.KEsc [])) =
+    modify $ \s -> s { asScreen = MainMenuScreen }
+handleSentenceListEvent (VtyEvent (V.EvKey V.KUp [])) =
+    modify $ \s -> s { asSentenceListIndex = max 0 (asSentenceListIndex s - 1) }
+handleSentenceListEvent (VtyEvent (V.EvKey (V.KChar 'k') [])) =
+    modify $ \s -> s { asSentenceListIndex = max 0 (asSentenceListIndex s - 1) }
+handleSentenceListEvent (VtyEvent (V.EvKey V.KDown [])) = do
+    s <- get
+    let maxIdx = max 0 (length (asSentences s) - 1)
+    modify $ \st -> st { asSentenceListIndex = min maxIdx (asSentenceListIndex st + 1) }
+handleSentenceListEvent (VtyEvent (V.EvKey (V.KChar 'j') [])) = do
+    s <- get
+    let maxIdx = max 0 (length (asSentences s) - 1)
+    modify $ \st -> st { asSentenceListIndex = min maxIdx (asSentenceListIndex st + 1) }
+handleSentenceListEvent (VtyEvent (V.EvKey (V.KChar 'n') [])) =
+    -- Start new sentence quest
+    modify $ \s -> s
+        { asScreen = SentenceQuestScreen
+        , asQuestState = Just emptyQuestState
+        }
+handleSentenceListEvent (VtyEvent (V.EvKey V.KEnter [])) = do
+    -- TODO: Practice selected sentence
+    s <- get
+    when (not $ null $ asSentences s) $ do
+        let _selectedSentence = asSentences s !! asSentenceListIndex s
+        -- For now, just start a new version quest for the sentence
+        modify $ \st -> st { asMessage = Just "Practice mode coming soon!" }
+handleSentenceListEvent _ = pure ()
+
+-- | Handle sentence quest screen events
+handleSentenceQuestEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+handleSentenceQuestEvent (VtyEvent (V.EvKey V.KEsc [])) = cancelQuest
+handleSentenceQuestEvent ev = do
+    s <- get
+    case asQuestState s of
+        Nothing -> modify $ \st -> st { asScreen = SentenceListScreen }
+        Just qs -> case questPhase qs of
+            EnteringEnglish -> handleEnglishPhase ev qs
+            BuildingKorean -> handleBuildingPhase ev qs
+            Validating -> handleValidatingPhase ev qs
+
+-- | Cancel quest and return to list
+cancelQuest :: EventM Name AppState ()
+cancelQuest = modify $ \s -> s
+    { asScreen = SentenceListScreen
+    , asQuestState = Nothing
+    }
+
+-- | Handle English sentence entry phase
+handleEnglishPhase :: BrickEvent Name AppEvent -> QuestState -> EventM Name AppState ()
+handleEnglishPhase (VtyEvent (V.EvKey V.KEnter [])) qs = do
+    let input = getCurrentInput qs
+    if T.null (T.strip input)
+        then pure ()  -- Don't proceed with empty input
+        else modify $ \s -> s { asQuestState = Just $ startChunkEntry qs }
+handleEnglishPhase (VtyEvent (V.EvKey V.KBS [])) qs =
+    modify $ \s -> s { asQuestState = Just $ setCurrentInput (T.dropEnd 1 $ getCurrentInput qs) qs }
+handleEnglishPhase (VtyEvent (V.EvKey (V.KChar c) [])) qs =
+    modify $ \s -> s { asQuestState = Just $ setCurrentInput (getCurrentInput qs <> T.singleton c) qs }
+handleEnglishPhase _ _ = pure ()
+
+-- | Handle Korean building phase
+handleBuildingPhase :: BrickEvent Name AppEvent -> QuestState -> EventM Name AppState ()
+handleBuildingPhase (VtyEvent (V.EvKey V.KEnter [])) qs = do
+    -- Add current input as a chunk
+    if null (getTypedJamo qs)
+        then pure ()  -- Don't add empty chunks
+        else modify $ \s -> s { asQuestState = Just $ addChunk qs }
+handleBuildingPhase (VtyEvent (V.EvKey (V.KChar ' ') [])) qs = do
+    -- Space with no input = finish building, move to validation
+    if null (getTypedJamo qs)
+        then when (isReadyForValidation qs) $
+            modify $ \s -> s { asQuestState = Just $ finishChunkEntry qs }
+        else
+            -- Space with input = add chunk and continue
+            modify $ \s -> s { asQuestState = Just $ addChunk qs }
+handleBuildingPhase (VtyEvent (V.EvKey V.KBS [])) qs = do
+    if null (getTypedJamo qs)
+        then
+            -- Backspace with empty input = remove last chunk
+            modify $ \s -> s { asQuestState = Just $ removeLastChunk qs }
+        else
+            -- Backspace with input = delete last jamo
+            modify $ \s -> s { asQuestState = Just $ removeLastJamo qs }
+handleBuildingPhase (VtyEvent (V.EvKey (V.KChar c) [])) qs =
+    -- Convert QWERTY key to Jamo and add it
+    case qwertyToJamo c of
+        Just jamo -> do
+            let newQs = addJamo jamo qs
+            modify $ \s -> s
+                { asQuestState = Just newQs
+                , asMessage = Just $ "Typed: " <> T.singleton c <> " → " <> getCurrentInput newQs
+                }
+        Nothing -> modify $ \s -> s
+            { asMessage = Just $ "Unknown key: " <> T.singleton c
+            }
+handleBuildingPhase ev _ = modify $ \s -> s
+    { asMessage = Just $ "Event: " <> T.pack (show ev)
+    }
+
+-- | Handle validation phase
+handleValidatingPhase :: BrickEvent Name AppEvent -> QuestState -> EventM Name AppState ()
+handleValidatingPhase (VtyEvent (V.EvKey (V.KChar 'y') [])) qs = saveSentenceAndReturn qs
+handleValidatingPhase (VtyEvent (V.EvKey (V.KChar 'Y') [])) qs = saveSentenceAndReturn qs
+handleValidatingPhase (VtyEvent (V.EvKey (V.KChar 'n') [])) qs =
+    -- Go back to building phase
+    modify $ \s -> s { asQuestState = Just $ qs { questPhase = BuildingKorean } }
+handleValidatingPhase (VtyEvent (V.EvKey (V.KChar 'N') [])) qs =
+    modify $ \s -> s { asQuestState = Just $ qs { questPhase = BuildingKorean } }
+handleValidatingPhase _ _ = pure ()
+
+-- | Save the sentence and return to list
+saveSentenceAndReturn :: QuestState -> EventM Name AppState ()
+saveSentenceAndReturn qs = do
+    -- Get new ID and current time
+    sid <- liftIO $ runJsonRepository nextSentenceId
+    now <- liftIO $ runJsonRepository getCurrentTime
+
+    -- Create and save the sentence
+    let sentence = confirmValidation sid now qs
+    liftIO $ runJsonRepository $ saveSentence sentence
+
+    -- Reload sentences and return to list
+    sentences <- liftIO $ runJsonRepository getAllSentences
+    modify $ \s -> s
+        { asScreen = SentenceListScreen
+        , asQuestState = Nothing
+        , asSentences = sentences
+        , asMessage = Just "Sentence saved!"
+        }
 

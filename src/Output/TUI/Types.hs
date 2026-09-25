@@ -36,6 +36,8 @@ module Output.TUI.Types
     , keyboardAttr
     , keyHighlightAttr
     , keyDisabledAttr
+    , chunkAttr
+    , chunkPendingAttr
     ) where
 
 import Data.Text (Text)
@@ -54,6 +56,7 @@ import Output.Domain.Jamo (Jamo)
 import Output.Domain.TypingLevel (TypingLevel)
 import Output.Domain.TypingWord (TypingWord)
 import Output.Domain.TypingExercise (TypingExerciseType, TypingPrompt, CharStatus)
+import Output.Domain.Sentence (Sentence, QuestState, emptyQuestState)
 
 -- | Widget names for focus management
 data Name
@@ -64,6 +67,7 @@ data Name
     | TypingInput
     | KeyboardView
     | LevelSelector
+    | QuestInput
     deriving (Show, Eq, Ord)
 
 -- | Application screens
@@ -75,6 +79,8 @@ data Screen
     | ProgressScreen
     | HelpScreen
     | QuitConfirmScreen
+    | SentenceQuestScreen
+    | SentenceListScreen
     deriving (Show, Eq)
 
 -- | Mode of the drill exercise
@@ -211,6 +217,10 @@ data AppState = AppState
     , asDueCards :: [VocabularyId]          -- Cards due for review
     , asSessionStats :: Maybe SessionStats  -- Today's session stats
     , asDailyStreak :: Int                  -- Current streak in days
+    -- Sentence quest state
+    , asQuestState :: Maybe QuestState      -- Current quest in progress
+    , asSentences :: [Sentence]             -- All saved sentences
+    , asSentenceListIndex :: Int            -- Selected sentence in list view
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -230,6 +240,10 @@ initialAppState = AppState
     , asDueCards = []
     , asSessionStats = Nothing
     , asDailyStreak = 0
+    -- Sentence quest defaults
+    , asQuestState = Nothing
+    , asSentences = []
+    , asSentenceListIndex = 0
     }
 
 -- | Attribute names for styling
@@ -268,3 +282,9 @@ keyHighlightAttr = attrName "keyHighlight"
 
 keyDisabledAttr :: AttrName
 keyDisabledAttr = attrName "keyDisabled"
+
+chunkAttr :: AttrName
+chunkAttr = attrName "chunk"
+
+chunkPendingAttr :: AttrName
+chunkPendingAttr = attrName "chunkPending"
