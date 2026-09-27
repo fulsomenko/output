@@ -26,6 +26,15 @@ module Output.TUI.Types
     , initialLLMChatState
       -- * Persona Edit
     , PersonaEditField(..)
+      -- * Dictionary Lookup
+    , LookupStatus(..)
+    , LookupState(..)
+    , initialLookupState
+    , lookupQuery
+    , applyJamo
+    , popJamo
+    , submitLookup
+    , applyLookupOutcome
       -- * Application State
     , AppState(..)
     , AppEvent(..)
@@ -56,11 +65,12 @@ import GHC.Generics (Generic)
 import Output.Domain.Types
 import Output.Domain.Activity (ActivityEntry)
 import Output.Domain.Exercise (ExercisePrompt)
-import Output.Domain.Jamo (Jamo)
+import Output.Domain.Jamo (Jamo, composeJamoSequence)
 import Output.Domain.TypingLevel (TypingLevel)
 import Output.Domain.TypingWord (TypingWord)
 import Output.Domain.TypingExercise (TypingExerciseType, TypingPrompt, CharStatus)
 import Output.Domain.Settings (AppSettings, defaultSettings)
+import Output.Dict.Krdict (KrdictWord)
 import Output.LLM.Agent (AgentTask(..))
 import Output.LLM.Persona (Persona)
 import Output.LLM.Extractor (ExtractedWord)
@@ -76,6 +86,7 @@ data Name
     | KeyboardView
     | LevelSelector
     | ChatHistoryViewport
+    | LookupViewport
     deriving (Show, Eq, Ord)
 
 -- | Application screens
@@ -92,6 +103,7 @@ data Screen
     | LLMChatScreen
     | SettingsScreen
     | PersonaScreen
+    | LookupScreen
     deriving (Show, Eq)
 
 -- | Mode of the drill exercise
@@ -252,6 +264,53 @@ data InputMode = NormalMode | InsertMode
 data PersonaEditField = PersonaEditName | PersonaEditStyle
     deriving (Show, Eq)
 
+-- | Status of the dictionary lookup screen.
+data LookupStatus
+    = LookupIdle                      -- No lookup run yet
+    | LookupLoading                   -- Request in flight
+    | LookupResults [KrdictWord]      -- Fetched word entries
+    | LookupError Text                -- Failure message
+    deriving (Show, Eq)
+
+-- | Live state of the dictionary lookup screen.
+data LookupState = LookupState
+    { lkInput  :: [Jamo]              -- ^ Jamo typed so far (two-beolsik order)
+    , lkStatus :: LookupStatus
+    , lkNote   :: Maybe Text          -- ^ Note after a lookup (e.g. save result)
+    } deriving (Show, Eq)
+
+-- | Fresh lookup state, empty input.
+initialLookupState :: LookupState
+initialLookupState = LookupState
+    { lkInput  = []
+    , lkStatus = LookupIdle
+    , lkNote   = Nothing
+    }
+
+-- | The currently typed word, composed in real time from the jamo.
+lookupQuery :: LookupState -> Text
+lookupQuery = composeJamoSequence . lkInput
+
+-- | Append one jamo to the input.
+applyJamo :: LookupState -> Jamo -> LookupState
+applyJamo s j = s { lkInput = lkInput s ++ [j] }
+
+-- | Remove the last jamo from the input (no-op when empty).
+popJamo :: LookupState -> LookupState
+popJamo s = s { lkInput = init (lkInput s) }
+
+-- | Enter is pressed: reset to loading, drop any stale note.
+submitLookup :: LookupState -> LookupState
+submitLookup s = s
+    { lkStatus = LookupLoading
+    , lkNote   = Nothing
+    }
+
+-- | Apply a finished lookup outcome to the state.
+applyLookupOutcome :: Either Text [KrdictWord] -> LookupState -> LookupState
+applyLookupOutcome (Right words) s = s { lkStatus = LookupResults words, lkNote = Nothing }
+applyLookupOutcome (Left err)   s = s { lkStatus = LookupError err,   lkNote = Nothing }
+
 -- | Custom events for the application
 data AppEvent
     = Tick
@@ -261,6 +320,7 @@ data AppEvent
     | LLMStreamError Text                 -- Stream failed; carries error message
     | LLMExtraction [ExtractedWord]       -- Vocabulary extracted from last turn
     | LLMSummary    Text                  -- Session summary from summarization agent
+    | KrdictLookupDone (Either Text [KrdictWord])  -- Async dictionary lookup result
     deriving (Show, Eq)
 
 -- | Main application state
@@ -286,6 +346,7 @@ data AppState = AppState
     , asSettings      :: AppSettings                    -- Language, level, Ollama config
     , asPersonaEdit   :: Maybe (PersonaEditField, Text) -- Active persona field edit
     , asStudentProfile :: Maybe StudentProfile          -- Cumulative student brief
+    , asLookup :: Maybe LookupState                      -- Active dictionary lookup session
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -312,6 +373,7 @@ initialAppState = AppState
     , asSettings       = defaultSettings
     , asPersonaEdit    = Nothing
     , asStudentProfile = Nothing
+    , asLookup         = Nothing
     }
 
 -- | Attribute names for styling

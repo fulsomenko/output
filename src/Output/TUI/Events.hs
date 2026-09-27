@@ -7,7 +7,8 @@ module Output.TUI.Events
 import Control.Monad (when, void)
 import Control.Monad.IO.Class (liftIO)
 import Control.Concurrent (forkIO)
-import Data.Char (digitToInt)
+import Data.Char (digitToInt, toLower)
+import System.Environment (lookupEnv)
 import Data.Maybe (fromMaybe, isJust)
 import Brick
 import Brick.BChan (BChan, writeBChan)
@@ -31,6 +32,7 @@ import Output.Domain.Types
     , TOPIK_Level(..)
     )
 import Output.Domain.Jamo (qwertyToJamo)
+import Output.Dict.Krdict (KrdictError(..), krdictLookup, saveKrdictWord)
 import Output.Domain.TypingLevel (TypingLevel(..), mainLevels, getSubLevels, hasSubLevels)
 import Output.Domain.TypingWord (TypingWord(..))
 import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), createSessionPrompts, validateTyping, CharStatus(..))
@@ -73,6 +75,7 @@ handleEvent chan ev = do
         LLMChatScreen           -> handleLLMChatEvent chan ev
         SettingsScreen          -> handleSettingsEvent ev
         PersonaScreen           -> handlePersonaEvent ev
+        LookupScreen            -> handleLookupEvent chan ev
 
 -- | Append an incoming session note to the student profile (disk + in-memory).
 -- The note log is append-only so no past observations are ever lost.
@@ -120,9 +123,9 @@ handleMenuEvent _    (VtyEvent (V.EvKey V.KUp [])) =
 handleMenuEvent _    (VtyEvent (V.EvKey (V.KChar 'k') [])) =
     modify $ \s -> s { asMenuIndex = max 0 (asMenuIndex s - 1) }
 handleMenuEvent _    (VtyEvent (V.EvKey V.KDown [])) =
-    modify $ \s -> s { asMenuIndex = min 14 (asMenuIndex s + 1) }
+    modify $ \s -> s { asMenuIndex = min 15 (asMenuIndex s + 1) }
 handleMenuEvent _    (VtyEvent (V.EvKey (V.KChar 'j') [])) =
-    modify $ \s -> s { asMenuIndex = min 14 (asMenuIndex s + 1) }
+    modify $ \s -> s { asMenuIndex = min 15 (asMenuIndex s + 1) }
 handleMenuEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
     s <- get
     case asMenuIndex s of
@@ -138,15 +141,16 @@ handleMenuEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
         7 -> startDrill TypingMode
         8 -> startDrill ReadingMode
         9 -> startDrill WritingMode
-        -- Progress / stats (10-11)
-        10 -> modify $ \st -> st { asScreen = ProgressScreen }
-        11 -> do
+        -- Lookup / progress / stats (10-12)
+        10 -> startLookup
+        11 -> modify $ \st -> st { asScreen = ProgressScreen }
+        12 -> do
             freshActivities <- liftIO $ runJsonRepository getAllActivities
             modify $ \st -> st { asScreen = StatsScreen, asActivities = freshActivities, asStatsSelectedDay = 0 }
-        -- Settings / help / quit (12-14)
-        12 -> modify $ \st -> st { asScreen = SettingsScreen }
-        13 -> modify $ \st -> st { asScreen = HelpScreen }
-        14 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
+        -- Settings / help / quit (13-15)
+        13 -> modify $ \st -> st { asScreen = SettingsScreen }
+        14 -> modify $ \st -> st { asScreen = HelpScreen }
+        15 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
         _ -> pure ()
 handleMenuEvent _    (VtyEvent (V.EvKey (V.KChar '?') [])) =
     modify $ \s -> s { asScreen = HelpScreen }
@@ -366,6 +370,98 @@ endDrill = do
         , asDrill = Nothing
         , asMessage = msg
         }
+
+-- ---------------------------------------------------------------------------
+-- Dictionary lookup (KRDICT)
+-- ---------------------------------------------------------------------------
+
+-- | Enter the dictionary lookup screen with a fresh session.
+startLookup :: EventM Name AppState ()
+startLookup = modify $ \s -> s
+    { asScreen  = LookupScreen
+    , asLookup  = Just initialLookupState
+    , asMessage = Nothing
+    }
+
+-- | Render a KRDICT error as its message text.
+krdictErrorText :: KrdictError -> Text
+krdictErrorText (KrdictHttpError t)  = t
+krdictErrorText (KrdictApiError t)   = t
+krdictErrorText (KrdictParseError t) = t
+
+-- | Handle events on the dictionary lookup screen.
+--
+-- Input is two-beolsik: a-z keys map to jamo (existing qwertyToJamo mapping)
+-- and compose into syllables in real time as you type.
+-- Enter fetches from KRDICT asynchronously (BChan + forkIO); on success the
+-- word is auto-saved to the learned vocabulary, deduped by word.
+handleLookupEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
+handleLookupEvent _ (AppEvent (KrdictLookupDone outcome)) = do
+    s <- get
+    case asLookup s of
+        Nothing -> pure ()
+        Just lk -> do
+            let level = maybe One intToLevel (settingsKoreanLevel (asSettings s))
+            case outcome of
+                Left err ->
+                    modify $ \st -> st { asLookup = Just (lk { lkStatus = LookupError err }) }
+                Right words -> do
+                    -- Auto-save (deduped, at the user's TOPIK level) and merge new cards.
+                    saved <- liftIO $ mapM (saveKrdictWord level) words
+                    let newCards = [c | Just c <- saved]
+                        newNote  = case newCards of
+                            [] -> Just "Already in your learned words."
+                            _  -> Just $ "Added " <> T.pack (show (length newCards))
+                                   <> " word(s) to your learned words."
+                    now <- liftIO getCurrentTime
+                    let localNow  = utcToLocalTime utc now
+                        newStates = foldr
+                            (\c m -> Map.insert (vocabId c) (newVocabularyState (vocabId c) localNow) m)
+                            (asVocabStates s)
+                            newCards
+                    modify $ \st -> st
+                        { asLookup      = Just (lk { lkStatus = LookupResults words, lkNote = newNote })
+                        , asVocabCards  = asVocabCards s ++ newCards
+                        , asVocabStates = newStates
+                        }
+
+-- Enter: submit the composed word (guarded: non-empty, not already loading)
+handleLookupEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
+    s <- get
+    case asLookup s of
+        Nothing -> pure ()
+        Just lk -> when (lkStatus lk /= LookupLoading && not (null (lkInput lk))) $ do
+            let word = lookupQuery lk
+            modify $ \st -> st { asLookup = Just (submitLookup lk) }
+            liftIO $ void $ forkIO $ do
+                mKey <- lookupEnv "KRDICT_API_KEY"
+                result <- case mKey of
+                    Nothing -> return
+                        (Left "KRDICT_API_KEY is not set. Put your key in .envrc.local and run: direnv allow")
+                    Just key -> krdictLookup (T.pack key) word
+                writeBChan chan (KrdictLookupDone (case result of
+                    Left  e -> Left (krdictErrorText e)
+                    Right w -> Right w
+                ))
+
+-- Backspace: remove the last jamo
+handleLookupEvent _ (VtyEvent (V.EvKey V.KBS [])) =
+    modify $ \s -> case asLookup s of
+        Nothing -> s
+        Just lk -> s { asLookup = Just (popJamo lk) }
+
+-- Letter key: map to a jamo and append to the input
+handleLookupEvent _ (VtyEvent (V.EvKey (V.KChar c) [])) = case qwertyToJamo (toLower c) of
+    Nothing -> pure ()
+    Just j  -> modify $ \s -> case asLookup s of
+        Nothing -> s
+        Just lk -> s { asLookup = Just (applyJamo lk j) }
+
+-- Esc: back to the main menu
+handleLookupEvent _ (VtyEvent (V.EvKey V.KEsc [])) =
+    modify $ \s -> s { asScreen = MainMenuScreen, asLookup = Nothing }
+
+handleLookupEvent _ _ = pure ()
 
 -- ---------------------------------------------------------------------------
 -- AI Lesson handlers

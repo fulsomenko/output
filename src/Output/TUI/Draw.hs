@@ -17,6 +17,7 @@ import Data.Time.Calendar (Day, diffDays)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 
 import Output.TUI.Types
+import Output.Dict.Krdict (KrdictSense(..), KrdictTranslation(..), KrdictWord(..), englishTranslation)
 import Output.Domain.Exercise (ExercisePrompt(..))
 import Output.Domain.Types (TypingProgress, VocabularyState(..), MasteryLevel(..), ExerciseType(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
@@ -53,6 +54,9 @@ drawUI s = [ui]
             Nothing   -> drawMainMenu s
         SettingsScreen -> drawSettings s
         PersonaScreen  -> drawPersonaScreen s
+        LookupScreen   -> case asLookup s of
+            Just lk -> drawLookup s lk
+            Nothing -> drawMainMenu s
 
 -- | Shared status bar shown at the bottom of every screen
 statusBar :: AppState -> Text -> Widget Name
@@ -103,6 +107,7 @@ drawMenuItems s = vBox $ zipWith (drawMenuItem (asMenuIndex s)) [0..] menuOption
         , ("Typing Drill",     "Practice typing Korean words")
         , ("Reading Drill",    "Read Korean and self-grade")
         , ("Writing Drill",    "Translate English to Korean")
+        , ("Dictionary Lookup","Look up any word in KRDICT (two-beolsik input)")
         , ("View Progress",    "See your learning statistics")
         , ("Activity Stats",   "View history of all practice sessions")
         , ("Settings",         "Language and Ollama configuration")
@@ -459,6 +464,12 @@ drawHelp s =
             [ txt "  Space       - Reveal the translation"
             , txt "  1-4         - Rate difficulty (1=Again, 4=Easy)"
             ]
+        , padTop (Pad 2) $ txt "Dictionary Lookup:"
+        , padTop (Pad 1) $ vBox
+            [ txt "  a-z         - Type Korean (two-beolsik layout)"
+            , txt "  Backspace   - Delete the last jamo"
+            , txt "  Enter       - Look up in KRDICT"
+            ]
         , fill ' '
         , statusBar s "[Esc] Back"
         ]
@@ -576,6 +587,68 @@ drawChatInput chat =
         NormalMode -> withAttr hintAttr  $ txt " N "
         InsertMode -> withAttr promptAttr $ txt " I "
 
+
+-- ---------------------------------------------------------------------------
+-- Dictionary lookup (KRDICT)
+-- ---------------------------------------------------------------------------
+
+-- | Draw the dictionary lookup screen: composed query input plus KRDICT results.
+drawLookup :: AppState -> LookupState -> Widget Name
+drawLookup s lk =
+    withBorderStyle unicodeBold $
+    vBox
+        [ borderWithLabel (withAttr titleAttr $ txt " Dictionary Lookup ") $
+            viewport LookupViewport Vertical $
+            padAll 1 $ vBox
+                [ hBox
+                    [ withAttr promptAttr $ txt (lookupQuery lk <> cursor)
+                    , padRight Max emptyWidget
+                    , withAttr hintAttr $ txt "(two-beolsik)"
+                    ]
+                , padTop (Pad 1) $ drawLookupStatus lk
+                ]
+        , fill ' '
+        , statusBar s "[type] two-beolsik  [⌫] delete  [Enter] look up  [Esc] back"
+        ]
+  where
+    cursor = if lkStatus lk == LookupLoading then "" else "│"
+
+-- | Draw the idle/loading/error/results status area of the lookup screen.
+drawLookupStatus :: LookupState -> Widget Name
+drawLookupStatus lk = case lkStatus lk of
+    LookupIdle    -> withAttr hintAttr $
+        txt "Type a Korean word (two-beolsik) and press Enter to look it up."
+    LookupLoading -> withAttr hintAttr $ txt "⏳ Looking up in KRDICT..."
+    LookupError e -> withAttr incorrectAttr $ txtWrap $ "Error: " <> e
+    LookupResults words ->
+        vBox
+            [ if null words
+                then withAttr hintAttr $ txt "No results."
+                else vBox (map drawLookupWord words)
+            , padTop (Pad 1) $ case lkNote lk of
+                Just n  -> withAttr hintAttr $ txt n
+                Nothing -> emptyWidget
+            ]
+
+-- | Draw one KRDICT word entry: headword, part of speech, senses.
+drawLookupWord :: KrdictWord -> Widget Name
+drawLookupWord w =
+    padBottom (Pad 2) $ vBox
+        [ hBox [ withAttr promptAttr $ txt (kwWord w), txt "  " ]
+            ++ concatMap (\t -> [txt "  ·  ", withAttr hintAttr $ txt t]) metaBits
+        , vBox (map drawLookupSense (kwSenses w))
+        ]
+  where
+    metaBits = [ t | t <- [kwPos w, kwWordGrade w], not (T.null t) ]
+
+-- | Draw one sense: ordered definition plus (if present) the English translation.
+drawLookupSense :: KrdictSense -> Widget Name
+drawLookupSense sens = vBox
+    [ txt $ T.pack (show (ksOrder sens)) <> ". " <> ksDefinition sens
+    , padLeft (Pad 3) $ case englishTranslation sens of
+        Just  t -> withAttr hintAttr $ txt $ "English: " <> ktWord t <> "  (" <> ktDfn t <> ")"
+        Nothing -> withAttr hintAttr $ txt "English: (no translation provided)"
+        ]
 
 -- | Draw the settings screen.
 drawSettings :: AppState -> Widget Name
