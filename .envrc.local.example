@@ -8,7 +8,11 @@ export OLLAMA_HOST=http://localhost:11434
 export OLLAMA_MODEL=gemma3:4b
 
 # KRDICT Open API key (32-char hex). Used by 'output lookup <word>'.
-# Apply at https://krdict.korean.go.kr/eng/openApi. Use the real key in .envrc.local.
-# The value may also be a path to a file containing the key (read at lookup
-# time), e.g. /run/secrets/krdict/api/key.
-export KRDICT_API_KEY=
+# Apply at https://krdict.korean.go.kr/eng/openApi.
+# The value may be the key itself, or a path to a file containing the key
+# (read at lookup time), e.g. /run/secrets/krdict/api/key.
+# This defaults to whatever KRDICT_API_KEY is already set to in your
+# environment (shell, CI, container secret), so a copied template does not
+# silently clobber a working key with an empty value. To set it here, replace
+# ${KRDICT_API_KEY:-} with your 32-char hex key or a path to a file holding it.
+export KRDICT_API_KEY=${KRDICT_API_KEY:-}

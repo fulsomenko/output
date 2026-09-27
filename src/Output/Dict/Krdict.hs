@@ -33,6 +33,7 @@ module Output.Dict.Krdict
     , krdictLookup
     , krdictParse
     , resolveApiKey
+    , resolveApiKeyChecked
     , percentEncode
     , krdictWordClass
     , krdictToCard
@@ -94,6 +95,7 @@ data KrdictError
     = KrdictHttpError Text    -- ^ transport / connection failure
     | KrdictApiError  Text    -- ^ non-2xx status, or empty result
     | KrdictParseError Text   -- ^ the response body was not valid KRDICT XML
+    | KrdictConfigError Text  -- ^ the API key / secret could not be resolved
     deriving (Show, Eq)
 
 -- ---------------------------------------------------------------------------
@@ -138,6 +140,51 @@ resolveApiKey v = do
       then T.strip . TEnc.decodeUtf8 . BL.toStrict <$> BL.readFile (T.unpack v)
       else pure v
 
+-- | Resolve a raw KRDICT_API_KEY value into the actual API key, validating it
+-- along the way and reporting a precise 'KrdictConfigError' for the failures
+-- that would otherwise surface as opaque server errors:
+--
+--   * an empty value (e.g. an env var that is set but holds nothing);
+--   * a value that looks like a file path but whose file does not exist;
+--   * a secret file that is empty or unreadable;
+--   * a bare value that is not a 32-character hex key.
+--
+-- A bare 32-character hex key and a path to a file holding one are both
+-- accepted; the latter is read and trimmed.
+resolveApiKeyChecked :: Text -> IO (Either KrdictError Text)
+resolveApiKeyChecked raw =
+    let v   = T.strip raw
+        cfg = pure . Left . KrdictConfigError
+    in if T.null v
+         then cfg "KRDICT_API_KEY is empty. Set it to a 32-character hex key (or a path to a file holding the key) in .envrc.local, then run: direnv allow"
+         else
+           if isPathLike v
+             then do
+               fileExists <- doesFileExist (T.unpack raw)
+               if fileExists
+                 then do
+                   file <- try (BL.readFile (T.unpack raw))
+                              :: IO (Either SomeException BL.ByteString)
+                   case file of
+                     Left (_ex :: SomeException) ->
+                       cfg ("KRDICT_API_KEY points at a secret file (" <> raw <> ") that could not be read.")
+                     Right bs ->
+                       let k = T.strip (TEnc.decodeUtf8 (BL.toStrict bs))
+                       in if T.null k
+                            then cfg ("KRDICT_API_KEY points at a secret file (" <> raw <> ") that is empty.")
+                            else if validKey k
+                                   then pure (Right k)
+                                   else cfg ("the secret file (" <> raw <> ") does not look like a 32-character hex key.")
+                 else
+                   cfg ("KRDICT_API_KEY points at a secret file (" <> raw <> ") that does not exist.")
+           else
+             if validKey v then pure (Right v)
+             else cfg "KRDICT_API_KEY does not look like a valid KRDICT key (expected a 32-character hex value, or a path to a file holding one)."
+  where
+    isPathLike t = T.any (== '/') t || T.isPrefixOf "~" t || T.isPrefixOf "." t
+    validKey   t = T.length t == 32 && T.all isHex t
+    isHex c     = isDigit c || c `elem` "abcdefABCDEF"
+
 -- | Search KRDICT for a word. Pure body parsing is split out as 'krdictParse'
 -- so it can be unit-tested without any network access.
 krdictLookup :: Text -- ^ API key (or path to a file holding it), used as key=
@@ -152,42 +199,48 @@ krdictLookup rawKey word = do
   where
     go :: IO (Either KrdictError [KrdictWord])
     go = do
-        apiKey <- resolveApiKey rawKey
-        -- Secure requests need a TLS manager; fall back to basic if the
-        -- TLS stack could not be initialised (e.g. no CA store available).
-        tlsResult <- try newTlsManager
-                          :: IO (Either SomeException Manager)
-        manager   <- case tlsResult of
-                         Right ok  -> pure ok
-                         Left _err -> newManager defaultManagerSettings
-        -- KRDICT defaults to translated=n (Korean definitions only). The app
-        -- needs the English gloss for each sense, so request translations in
-        -- English (trans_lang=1). Without these the response has no
-        -- <translation> elements and every word looks untranslatable.
-        let url = "https://krdict.korean.go.kr/api/search"
-                <> "?key=" <> percentEncode apiKey
-                <> "&q=" <> percentEncode word
-                <> "&part=word"
-                <> "&num=10"
-                <> "&translated=y"
-                <> "&trans_lang=1"
-        req <- parseRequest url
-        let req' = req
-                { method          = "GET"
-                , responseTimeout = responseTimeoutNone
-                }
-        resp <- httpLbs req' manager
-        let code = statusCode (responseStatus resp)
-        if not (statusIsSuccessful (responseStatus resp))
-            then pure $ Left (KrdictApiError ("KRDICT returned HTTP " <> T.pack (show code)))
-            else
-                let text = TEnc.decodeUtf8 (BL.toStrict (responseBody resp))
-                in case krdictParse text of
-                    Left e  -> pure $ Left (KrdictParseError ("could not parse KRDICT response: " <> e))
-                    Right ws ->
-                        if null ws
-                            then pure $ Left (KrdictApiError ("no KRDICT results for " <> word))
-                            else pure (Right ws)
+        keyRes <- resolveApiKeyChecked rawKey
+        case keyRes of
+            Left err     -> pure (Left err)
+            Right apiKey -> withKey apiKey
+      where
+        withKey :: Text -> IO (Either KrdictError [KrdictWord])
+        withKey apiKey = do
+            -- Secure requests need a TLS manager; fall back to basic if the
+            -- TLS stack could not be initialised (e.g. no CA store available).
+            tlsResult <- try newTlsManager
+                              :: IO (Either SomeException Manager)
+            manager   <- case tlsResult of
+                             Right ok  -> pure ok
+                             Left _err -> newManager defaultManagerSettings
+            -- KRDICT defaults to translated=n (Korean definitions only). The app
+            -- needs the English gloss for each sense, so request translations in
+            -- English (trans_lang=1). Without these the response has no
+            -- <translation> elements and every word looks untranslatable.
+            let url = "https://krdict.korean.go.kr/api/search"
+                    <> "?key=" <> percentEncode apiKey
+                    <> "&q=" <> percentEncode word
+                    <> "&part=word"
+                    <> "&num=10"
+                    <> "&translated=y"
+                    <> "&trans_lang=1"
+            req <- parseRequest url
+            let req' = req
+                    { method          = "GET"
+                    , responseTimeout = responseTimeoutNone
+                    }
+            resp <- httpLbs req' manager
+            let code = statusCode (responseStatus resp)
+            if not (statusIsSuccessful (responseStatus resp))
+                then pure $ Left (KrdictApiError ("KRDICT returned HTTP " <> T.pack (show code)))
+                else
+                    let text = TEnc.decodeUtf8 (BL.toStrict (responseBody resp))
+                    in case krdictParse text of
+                        Left e  -> pure $ Left (KrdictParseError ("could not parse KRDICT response: " <> e))
+                        Right ws ->
+                            if null ws
+                                then pure $ Left (KrdictApiError ("no KRDICT results for " <> word))
+                                else pure (Right ws)
 
 -- | Parse a KRDICT XML response body into its list of words. Pure.
 krdictParse :: Text -> Either Text [KrdictWord]

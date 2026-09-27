@@ -385,9 +385,10 @@ startLookup = modify $ \s -> s
 
 -- | Render a KRDICT error as its message text.
 krdictErrorText :: KrdictError -> Text
-krdictErrorText (KrdictHttpError t)  = t
-krdictErrorText (KrdictApiError t)   = t
-krdictErrorText (KrdictParseError t) = t
+krdictErrorText (KrdictHttpError t)   = t
+krdictErrorText (KrdictApiError t)    = t
+krdictErrorText (KrdictParseError t)  = t
+krdictErrorText (KrdictConfigError t) = t
 
 -- | Handle events on the dictionary lookup screen.
 --

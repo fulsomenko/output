@@ -237,6 +237,7 @@ readCurrentLevel = do
 
 -- | Human-facing message for a KRDICT error.
 krdictErrorText :: KrdictError -> Text
-krdictErrorText (KrdictHttpError t)  = t
-krdictErrorText (KrdictApiError t)   = t
-krdictErrorText (KrdictParseError t) = t
+krdictErrorText (KrdictHttpError t)   = t
+krdictErrorText (KrdictApiError t)    = t
+krdictErrorText (KrdictParseError t)  = t
+krdictErrorText (KrdictConfigError t) = t

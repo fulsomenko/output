@@ -16,7 +16,8 @@ import Output.Domain.Types
     , WordClass(..)
     )
 import Output.Dict.Krdict
-    ( KrdictSense(..)
+    ( KrdictError(..)
+    , KrdictSense(..)
     , KrdictTranslation(..)
     , KrdictWord(..)
     , englishTranslation
@@ -26,6 +27,7 @@ import Output.Dict.Krdict
     , krdictWordClass
     , percentEncode
     , resolveApiKey
+    , resolveApiKeyChecked
     )
 
 spec :: Spec
@@ -149,6 +151,39 @@ spec = do
             writeFile path "abcdef0123456789abcdef0123456789\n"
             resolved <- resolveApiKey (T.pack path)
             resolved `shouldBe` "abcdef0123456789abcdef0123456789"
+            writeFile path ""
+
+    -- Validation for the secret. Each bad case produces a precise
+    -- KrdictConfigError instead of an opaque KRDICT server error -- the
+    -- exact failures an empty / mis-pointed KRDICT_API_KEY produces.
+    describe "resolveApiKeyChecked" $ do
+        it "accepts a bare 32-character hex key" $
+            resolveApiKeyChecked "0123456789abcdef0123456789abcdef"
+                `shouldReturn` (Right "0123456789abcdef0123456789abcdef")
+
+        it "rejects an empty (or whitespace-only) value" $
+            resolveApiKeyChecked "   "
+                `shouldReturn` (Left (KrdictConfigError _))
+
+        it "rejects a bare value that is not a 32-character hex key" $
+            resolveApiKeyChecked "not-a-key"
+                `shouldReturn` (Left (KrdictConfigError _))
+
+        it "rejects a secret file that does not exist" $
+            resolveApiKeyChecked "dist-newstyle/.krdict-spec-missing"
+                `shouldReturn` (Left (KrdictConfigError _))
+
+        it "rejects a secret file that is empty" $ do
+            let path = "dist-newstyle/.krdict-spec-empty"
+            writeFile path ""
+            resolveApiKeyChecked (T.pack path)
+                `shouldReturn` (Left (KrdictConfigError _))
+
+        it "resolves a 32-character hex key from a file" $ do
+            let path = "dist-newstyle/.krdict-spec-key"
+            writeFile path "abcdef0123456789abcdef0123456789\n"
+            resolveApiKeyChecked (T.pack path)
+                `shouldReturn` (Right "abcdef0123456789abcdef0123456789")
             writeFile path ""
 
 -- | A representative KRDICT search response. KRDICT nests its <item> elements
