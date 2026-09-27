@@ -437,12 +437,11 @@ handleLookupEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
                 mKey <- lookupEnv "KRDICT_API_KEY"
                 result <- case mKey of
                     Nothing -> return
-                        (Left "KRDICT_API_KEY is not set. Put your key in .envrc.local and run: direnv allow")
+                        (Left (KrdictApiError (T.pack "KRDICT_API_KEY is not set. Put your key in .envrc.local and run: direnv allow")))
                     Just key -> krdictLookup (T.pack key) word
                 writeBChan chan (KrdictLookupDone (case result of
                     Left  e -> Left (krdictErrorText e)
-                    Right w -> Right w
-                ))
+                    Right w -> Right w))
 
 -- Backspace: remove the last jamo
 handleLookupEvent _ (VtyEvent (V.EvKey V.KBS [])) =

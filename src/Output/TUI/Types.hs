@@ -297,7 +297,9 @@ applyJamo s j = s { lkInput = lkInput s ++ [j] }
 
 -- | Remove the last jamo from the input (no-op when empty).
 popJamo :: LookupState -> LookupState
-popJamo s = s { lkInput = init (lkInput s) }
+popJamo s
+    | null (lkInput s)  = s
+    | otherwise         = s { lkInput = init (lkInput s) }
 
 -- | Enter is pressed: reset to loading, drop any stale note.
 submitLookup :: LookupState -> LookupState

@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Integration with the KRDICT Open API (krdict.korean.go.kr).
 --
@@ -42,15 +43,15 @@ module Output.Dict.Krdict
 import Control.Exception (try, SomeException)
 import Data.Aeson (encode)
 import Data.Word (Word8)
-import qualified Data.ByteString.Char8 as BSC
+import Data.ByteString (unpack)
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (isAlpha, isDigit)
-import Data.List (mapMaybe)
-import Data.Maybe (fromMaybe, listToMaybe)
-import Data.Read (readMaybe)
+import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TEnc
 import Network.HTTP.Client
+import Network.HTTP.Types (statusCode, statusIsSuccessful)
 import System.Directory (createDirectoryIfMissing)
 
 import Output.Domain.Types
@@ -100,7 +101,7 @@ data KrdictError
 -- | Percent-encode a value so it is safe to place in a URL query string.
 -- Encodes every UTF-8 byte except the unreserved set [A-Za-z0-9-_.~].
 percentEncode :: Text -> String
-percentEncode t = concatMap encodeByte (BSC.unpack (T.encodeUtf8 t))
+percentEncode t = concatMap encodeByte (unpack (TEnc.encodeUtf8 t))
   where
     safe :: String
     safe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"
@@ -149,11 +150,11 @@ krdictLookup apiKey word = do
                 , responseTimeout = responseTimeoutNone
                 }
         resp <- httpLbs req' manager
-        let code = statusCode (responseStatusCode resp)
-        if not (statusIsSuccess code)
+        let code = statusCode (responseStatus resp)
+        if not (statusIsSuccessful (responseStatus resp))
             then pure $ Left (KrdictApiError ("KRDICT returned HTTP " <> T.pack (show code)))
             else
-                let text = T.decodeUtf8 (BL.toStrict (responseBody resp))
+                let text = TEnc.decodeUtf8 (BL.toStrict (responseBody resp))
                 in case krdictParse text of
                     Left e  -> pure $ Left (KrdictParseError ("could not parse KRDICT response: " <> e))
                     Right ws ->
@@ -225,8 +226,7 @@ saveKrdictWord level w = do
     if already
         then pure Nothing
         else do
-            let existingIds = map cardId existing
-                    where cardId (VocabularyId n) = n
+            let existingIds = map (\c -> let VocabularyId n = vocabId c in n) existing
                 maxId    = foldr max 100000 existingIds
                 nextId   = VocabularyId (maxId + 1)
                 newCard  = buildCard nextId level w
@@ -381,4 +381,6 @@ transToTrans t = KrdictTranslation
 
 -- | Parse a Text as an Int when possible (KRDICT fields like target_code).
 readInt :: Text -> Maybe Int
-readInt = readMaybe . T.unpack
+readInt t = case reads (T.unpack t) of
+    (n, "") : _ -> Just n
+    _           -> Nothing

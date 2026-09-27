@@ -8,10 +8,10 @@ import System.Environment (getArgs, lookupEnv)
 import Data.Maybe (isJust)
 import Data.Time (getCurrentTime, utcToLocalTime, utc)
 import qualified Data.Map as Map
+import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import System.IO (hFlush, stdout)
-import Text.Read (readMaybe)
 
 import Output.Domain.Types
 import Output.Domain.Exercise
@@ -46,14 +46,16 @@ runCLI = do
 
 -- | Parse a TOPIK level from string
 parseLevel :: String -> Maybe TOPIK_Level
-parseLevel s = case readMaybe s :: Maybe Int of
-    Just 1 -> Just One
-    Just 2 -> Just Two
-    Just 3 -> Just Three
-    Just 4 -> Just Four
-    Just 5 -> Just Five
-    Just 6 -> Just Six
-    _ -> Nothing
+parseLevel s = case reads s of
+    (n, "") : _ -> case n of
+        1 -> Just One
+        2 -> Just Two
+        3 -> Just Three
+        4 -> Just Four
+        5 -> Just Five
+        6 -> Just Six
+        _   -> Nothing
+    _           -> Nothing
 
 -- | Print usage
 printUsage :: IO ()
@@ -189,8 +191,8 @@ lookupWord wordStr = do
             TIO.putStrLn "Copy .envrc.local.example to .envrc.local, set KRDICT_API_KEY to your key, then run:"
             TIO.putStrLn "    direnv allow"
         Just key -> do
-            let word   = T.pack wordStr
-                    apiKey = T.pack key
+            let word = T.pack wordStr
+            let apiKey = T.pack key
             TIO.putStrLn $ "Looking up '" <> word <> "' in KRDICT ..."
             result <- krdictLookup apiKey word
             case result of

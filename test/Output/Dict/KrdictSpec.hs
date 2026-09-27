@@ -45,17 +45,16 @@ spec = do
             let Right ws = krdictParse sampleXml
             let [w]      = ws
             let senses   = kwSenses w
-            [s1, s2]     = senses
+            let [s1, s2] = senses
             ksDefinition s1 `shouldBe` "줄기나 가지가 목질로 된 여러해살이 식물."
             length (ksTranslations s1) `shouldBe` 2   -- English + Japanese
             length (ksTranslations s2) `shouldBe` 1   -- Japanese only
 
         it "rejects content that is not KRDICT XML" $ do
             case krdictParse "not-a-krdict-response" of
-                Left _   -> return ()
-                Right ws ->
-                    fail $ "expected a parse failure but got "
-                       <> show (length ws) <> " word(s)"
+                Left _   -> True
+                Right _  -> False
+            `shouldBe` True
 
     describe "englishTranslation" $ do
         it "picks the English (영어) translation when present" $ do

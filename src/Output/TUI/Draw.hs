@@ -634,7 +634,7 @@ drawLookupStatus lk = case lkStatus lk of
 drawLookupWord :: KrdictWord -> Widget Name
 drawLookupWord w =
     padBottom (Pad 2) $ vBox
-        [ hBox [ withAttr promptAttr $ txt (kwWord w), txt "  " ]
+        [ hBox $ [ withAttr promptAttr $ txt (kwWord w), txt "  " ]
             ++ concatMap (\t -> [txt "  ·  ", withAttr hintAttr $ txt t]) metaBits
         , vBox (map drawLookupSense (kwSenses w))
         ]
