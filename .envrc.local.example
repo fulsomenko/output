@@ -6,3 +6,7 @@ export OLLAMA_HOST=http://localhost:11434
 
 # Model served by Ollama. Must be pulled first: ollama pull gemma3:4b
 export OLLAMA_MODEL=gemma3:4b
+
+# KRDICT Open API key (32-char hex). Used by 'output lookup <word>'.
+# Apply at https://krdict.korean.go.kr/eng/openApi. Use the real key in .envrc.local.
+export KRDICT_API_KEY=

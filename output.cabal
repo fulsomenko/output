@@ -37,6 +37,7 @@ library
         Output.Algorithm.SpacedRepetition
         Output.Algorithm.ExerciseGen
         Output.Algorithm.Streak
+        Output.Dict.Krdict
         Output.LLM.Client
         Output.LLM.Persona
         Output.LLM.Agent
@@ -97,3 +98,4 @@ test-suite output-test
         Output.Algorithm.SpacedRepetitionSpec
         Output.Algorithm.StreakSpec
         Output.Algorithm.SRSSpec
+        Output.Dict.KrdictSpec
