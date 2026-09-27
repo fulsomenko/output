@@ -160,11 +160,17 @@ krdictLookup rawKey word = do
         manager   <- case tlsResult of
                          Right ok  -> pure ok
                          Left _err -> newManager defaultManagerSettings
+        -- KRDICT defaults to translated=n (Korean definitions only). The app
+        -- needs the English gloss for each sense, so request translations in
+        -- English (trans_lang=1). Without these the response has no
+        -- <translation> elements and every word looks untranslatable.
         let url = "https://krdict.korean.go.kr/api/search"
                 <> "?key=" <> percentEncode apiKey
                 <> "&q=" <> percentEncode word
                 <> "&part=word"
                 <> "&num=10"
+                <> "&translated=y"
+                <> "&trans_lang=1"
         req <- parseRequest url
         let req' = req
                 { method          = "GET"
@@ -332,6 +338,13 @@ closeElement tag input = run [] (T.empty) input
         | T.isPrefixOf "<?" rest =
             let (_, after) = T.breakOn "?>" rest
             in run acc accText (T.drop 2 after)
+        -- A CDATA section (<![CDATA[...]]>) is character data, not an
+        -- element. KRDICT wraps trans_word / trans_dfn in CDATA, so capture
+        -- the raw contents as text rather than treating the marker as a tag.
+        | T.isPrefixOf "<![CDATA[" rest =
+            let (before, after) = T.breakOn "]]>" rest
+                content         = T.drop 9 before
+            in run acc (accText <> content) (T.drop 3 after)
         | T.isPrefixOf "<" rest =
             let (el, rest') = parseElement rest
             in run (el : acc) accText rest'

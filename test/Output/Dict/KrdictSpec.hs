@@ -76,6 +76,32 @@ spec = do
             let Right ws = krdictParse sampleXml
             englishTranslations (head ws) `shouldBe` ["tree"]
 
+    describe "krdictParse CDATA" $ do
+        -- The real KRDICT API wraps trans_word / trans_dfn in <![CDATA[...]]>,
+        -- unlike the plain-text fixture above. This must still parse, and the
+        -- English gloss must be recoverable.
+        it "extracts CDATA-wrapped trans_word and trans_dfn" $ do
+            case krdictParse cdataXml of
+                Left e   -> fail $ "could not parse CDATA sample: " <> T.unpack e
+                Right ws -> do
+                    length ws `shouldBe` 1
+                    let [w] = ws
+                    kwWord w `shouldBe` "오이"
+                    kwPos w  `shouldBe` "명사"
+                    length (kwSenses w) `shouldBe` 1
+                    let [s] = kwSenses w
+                    length (ksTranslations s) `shouldBe` 1
+                    englishTranslation s `shouldBe`
+                        Just (KrdictTranslation "영어" "cucumber"
+                               "A plant which has yellow flowers and long, oval-shaped, green fruits in summer, or its fruit.")
+
+        it "keeps the comma-separated gloss intact in CDATA" $ do
+            case krdictParse cdataMultiXml of
+                Left e   -> fail $ "could not parse CDATA sample: " <> T.unpack e
+                Right ws -> do
+                    let [w] = ws
+                    englishTranslations w `shouldBe` ["oikimchi, cucumber kimchi"]
+
     describe "krdictWordClass" $ do
         it "maps 명사 to Noun" $
             krdictWordClass "명사" `shouldBe` Noun
@@ -161,6 +187,63 @@ sampleXml =
   <> "<trans_lang>일본어</trans_lang>"
   <> "<trans_word>材木</trans_word>"
   <> "<trans_dfn>材木用の木。</trans_dfn>"
+  <> "</translation>"
+  <> "</sense>"
+  <> "</item>"
+  <> "</channel>"
+  <> "</document>"
+  <> "</response>"
+
+-- | A KRDICT response in its real wire format: the trans_word / trans_dfn
+-- values are CDATA sections (the plain-text sample above is not how KRDICT
+-- actually emits them, which is why the CDATA tests are separate).
+cdataXml :: Text
+cdataXml =
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+  <> "<response>"
+  <> "<document>"
+  <> "<channel>"
+  <> "<item>"
+  <> "<target_code>200</target_code>"
+  <> "<word>오이</word>"
+  <> "<word_grade>초급</word_grade>"
+  <> "<pos>명사</pos>"
+  <> "<link>https://krdict.korean.go.kr</link>"
+  <> "<sense>"
+  <> "<sense_order>1</sense_order>"
+  <> "<definition>여름에 노란 꽃이 피고 초록색의 긴 타원형 열매가 열리는 식물. 또는 그 열매.</definition>"
+  <> "<translation>"
+  <> "<trans_lang>영어</trans_lang>"
+  <> "<trans_word><![CDATA[cucumber]]></trans_word>"
+  <> "<trans_dfn><![CDATA[A plant which has yellow flowers and long, oval-shaped, green fruits in summer, or its fruit. ]]></trans_dfn>"
+  <> "</translation>"
+  <> "</sense>"
+  <> "</item>"
+  <> "</channel>"
+  <> "</document>"
+  <> "</response>"
+
+-- | A CDATA response whose gloss contains a comma (multi-word), to guard the
+-- extractor against splitting on punctuation.
+cdataMultiXml :: Text
+cdataMultiXml =
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+  <> "<response>"
+  <> "<document>"
+  <> "<channel>"
+  <> "<item>"
+  <> "<target_code>201</target_code>"
+  <> "<word>오이김치</word>"
+  <> "<word_grade>중급</word_grade>"
+  <> "<pos>명사</pos>"
+  <> "<link>https://krdict.korean.go.kr</link>"
+  <> "<sense>"
+  <> "<sense_order>1</sense_order>"
+  <> "<definition>오이를 이용하여 만든 김치.</definition>"
+  <> "<translation>"
+  <> "<trans_lang>영어</trans_lang>"
+  <> "<trans_word><![CDATA[oikimchi, cucumber kimchi]]></trans_word>"
+  <> "<trans_dfn><![CDATA[A type of Korean pickle made from cucumbers. ]]></trans_dfn>"
   <> "</translation>"
   <> "</sense>"
   <> "</item>"
