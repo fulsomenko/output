@@ -4,7 +4,8 @@ module Output.CLI
     ( runCLI
     ) where
 
-import System.Environment (getArgs)
+import System.Environment (getArgs, lookupEnv)
+import Data.Maybe (isJust)
 import Data.Time (getCurrentTime, utcToLocalTime, utc)
 import qualified Data.Map as Map
 import qualified Data.Text as T
@@ -14,6 +15,15 @@ import Text.Read (readMaybe)
 
 import Output.Domain.Types
 import Output.Domain.Exercise
+import Output.Dict.Krdict
+    ( KrdictError(..)
+    , KrdictSense(..)
+    , KrdictTranslation(..)
+    , KrdictWord(..)
+    , englishTranslation
+    , krdictLookup
+    , saveKrdictWord
+    )
 import Output.Repository.Json (runJsonRepository)
 import Output.Repository.Class
 
@@ -31,6 +41,7 @@ runCLI = do
         ["drill", levelStr] -> case parseLevel levelStr of
             Just level -> startDrill (Just level)
             Nothing -> putStrLn $ "Invalid level: " ++ levelStr ++ ". Use 1-6."
+        ["lookup", wordStr] -> lookupWord wordStr
         _ -> putStrLn "Unknown command. Try 'output help'"
 
 -- | Parse a TOPIK level from string
@@ -59,6 +70,7 @@ printHelp = putStr $ unlines
     , "  next-exercises    Get today's due exercises"
     , "  drill             Start an interactive drill session"
     , "  drill <level>     Drill for specific TOPIK level (1-6)"
+    , "  lookup <word>     Look up a word in the KRDICT dictionary"
     , "  help              Show this help message"
     , "  version           Show version"
     , ""
@@ -161,3 +173,68 @@ runDrillLoop (prompt:rest) correct total = do
                     putStrLn $ "✗ Incorrect. Answer: " ++ T.unpack (epExpectedAnswer prompt)
                     putStrLn ""
             runDrillLoop rest (if isCorrect then correct + 1 else correct) (total + 1)
+
+-- ---------------------------------------------------------------------------
+-- KRDICT dictionary lookup
+-- ---------------------------------------------------------------------------
+
+-- | Look a word up in the KRDICT dictionary, print it, and merge the result
+-- into the learned-words store. The API key is read from KRDICT_API_KEY.
+lookupWord :: String -> IO ()
+lookupWord wordStr = do
+    mKey <- lookupEnv "KRDICT_API_KEY"
+    case mKey of
+        Nothing -> do
+            TIO.putStrLn "KRDICT_API_KEY is not set."
+            TIO.putStrLn "Copy .envrc.local.example to .envrc.local, set KRDICT_API_KEY to your key, then run:"
+            TIO.putStrLn "    direnv allow"
+        Just key -> do
+            let word   = T.pack wordStr
+                    apiKey = T.pack key
+            TIO.putStrLn $ "Looking up '" <> word <> "' in KRDICT ..."
+            result <- krdictLookup apiKey word
+            case result of
+                Left err -> TIO.putStrLn $ "Lookup failed: " <> krdictErrorText err
+                Right ws -> do
+                    mapM_ displayWord ws
+                    level <- readCurrentLevel
+                    results <- mapM (saveKrdictWord level) ws
+                    let added = length (filter isJust results)
+                    if added == 0
+                        then TIO.putStrLn "\nAlready in your learned words; nothing new to add."
+                        else TIO.putStrLn $ "\nAdded " <> T.pack (show added)
+                            <> " word(s) to your learned words at TOPIK level "
+                            <> T.pack (show (fromEnum level + 1)) <> "."
+
+-- | Render one KRDICT word entry: headword, part of speech, level, then each sense.
+displayWord :: KrdictWord -> IO ()
+displayWord w = do
+    TIO.putStrLn $ "\n--- " <> kwWord w <> " ---"
+    TIO.putStrLn $ "Part of speech: " <> kwPos w
+    if T.null (kwPronunciation w)
+        then return ()
+        else TIO.putStrLn $ "Pronunciation : " <> kwPronunciation w
+    if T.null (kwWordGrade w)
+        then return ()
+        else TIO.putStrLn $ "KRDICT level  : " <> kwWordGrade w
+    mapM_ displaySense (kwSenses w)
+
+-- | Render one sense: its definition, plus the English translation if present.
+displaySense :: KrdictSense -> IO ()
+displaySense s = do
+    TIO.putStrLn $ "  [" <> T.pack (show (ksOrder s)) <> "] " <> ksDefinition s
+    case englishTranslation s of
+        Just t  -> TIO.putStrLn $ "           English: " <> ktWord t <> "  (" <> ktDfn t <> ")"
+        Nothing -> TIO.putStrLn "           English: (no translation provided)"
+
+-- | Current TOPIK level from the stored user progress.
+readCurrentLevel :: IO TOPIK_Level
+readCurrentLevel = do
+    progress <- runJsonRepository getProgress
+    pure (upCurrentLevel progress)
+
+-- | Human-facing message for a KRDICT error.
+krdictErrorText :: KrdictError -> Text
+krdictErrorText (KrdictHttpError t)  = t
+krdictErrorText (KrdictApiError t)   = t
+krdictErrorText (KrdictParseError t) = t
