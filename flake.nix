@@ -33,7 +33,6 @@
             cabal-install
             openssl
             openssl.dev
-            ca-bundle
             haskellPackages.haskell-language-server
             haskellPackages.hlint
             haskellPackages.stylish-haskell
@@ -47,6 +46,15 @@
           ];
 
           shellHook = ''
+            # Point OpenSSL at the host CA store so https lookups (e.g. KRDICT)
+            # work from inside the shell.
+            if [ -z "$SSL_CERT_FILE" ] && [ -e /etc/ssl/certs/ca-certificates.crt ]; then
+              export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+            fi
+            if [ -z "$SSL_CERT_DIR" ] && [ -d /etc/ssl/certs ]; then
+              export SSL_CERT_DIR=/etc/ssl/certs
+            fi
+
             echo "Output - Korean Learning App"
             echo "Haskell environment loaded"
             echo "Available commands:"

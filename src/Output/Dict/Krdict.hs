@@ -135,7 +135,7 @@ resolveApiKey :: Text -> IO Text
 resolveApiKey v = do
     isFile <- doesFileExist (T.unpack v)
     if isFile
-      then T.strip . TEnc.decodeUtf8 <$> BL.readFile (T.unpack v)
+      then T.strip . TEnc.decodeUtf8 . BL.toStrict <$> BL.readFile (T.unpack v)
       else pure v
 
 -- | Search KRDICT for a word. Pure body parsing is split out as 'krdictParse'
@@ -155,7 +155,11 @@ krdictLookup rawKey word = do
         apiKey <- resolveApiKey rawKey
         -- Secure requests need a TLS manager; fall back to basic if the
         -- TLS stack could not be initialised (e.g. no CA store available).
-        manager <- maybe (newManager defaultManagerSettings) pure (newTlsManager)
+        tlsResult <- try newTlsManager
+                          :: IO (Either SomeException Manager)
+        manager   <- case tlsResult of
+                         Right ok  -> pure ok
+                         Left _err -> newManager defaultManagerSettings
         let url = "https://krdict.korean.go.kr/api/search"
                 <> "?key=" <> percentEncode apiKey
                 <> "&q=" <> percentEncode word

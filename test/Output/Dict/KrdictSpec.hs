@@ -8,7 +8,6 @@ module Output.Dict.KrdictSpec (spec) where
 import Test.Hspec
 import Data.Text (Text)
 import qualified Data.Text as T
-import System.Directory (createDirectoryIfMissing, getTemporaryDirectory, removeFile)
 import System.IO (writeFile)
 
 import Output.Domain.Types
@@ -109,18 +108,22 @@ spec = do
             percentEncode "가" `shouldBe` "%ea%b0%80"
 
     describe "resolveApiKey" $ do
-        it "keeps a bare key verbatim" $
-            resolveApiKey "0123456789abcdef0123456789abcdef"
-                `shouldBe` "0123456789abcdef0123456789abcdef"
+        it "keeps a bare key verbatim" $ do
+            resolved <- resolveApiKey "0123456789abcdef0123456789abcdef"
+            resolved `shouldBe` "0123456789abcdef0123456789abcdef"
 
         it "reads the key from a file when the value references one" $ do
-            tmpDir <- getTemporaryDirectory
-            let dir  = tmpDir ++ "/output-krdict-spec"
-                path = dir ++ "/test-key"
-            createDirectoryIfMissing True dir
+            -- The test-suite's deps are pinned to base-only (no directory
+            -- package), so no temp dir is available. dist-newstyle (cabal's
+            -- build dir, present once the suite has been built, and gitignored)
+            -- is a safe scratch location; the key is written, asserted, and the
+            -- scratch content is truncated (it cannot be unlinked without the
+            -- directory package).
+            let path = "dist-newstyle/.krdict-spec-key"
             writeFile path "abcdef0123456789abcdef0123456789\n"
-            resolveApiKey path `shouldBe` "abcdef0123456789abcdef0123456789"
-            removeFile path
+            resolved <- resolveApiKey (T.pack path)
+            resolved `shouldBe` "abcdef0123456789abcdef0123456789"
+            writeFile path ""
 
 -- | A representative KRDICT search response. KRDICT nests its <item> elements
 -- under <response><document><channel>, so this fixture also exercises the
