@@ -8,6 +8,8 @@ module Output.Dict.KrdictSpec (spec) where
 import Test.Hspec
 import Data.Text (Text)
 import qualified Data.Text as T
+import System.Directory (createDirectoryIfMissing, getTemporaryDirectory, removeFile)
+import System.IO (writeFile)
 
 import Output.Domain.Types
     ( TOPIK_Level(..)
@@ -24,6 +26,7 @@ import Output.Dict.Krdict
     , krdictToCard
     , krdictWordClass
     , percentEncode
+    , resolveApiKey
     )
 
 spec :: Spec
@@ -104,6 +107,20 @@ spec = do
             percentEncode "a b" `shouldBe` "a%20b"
         it "percent-encodes UTF-8 bytes for Korean text" $
             percentEncode "가" `shouldBe` "%ea%b0%80"
+
+    describe "resolveApiKey" $ do
+        it "keeps a bare key verbatim" $
+            resolveApiKey "0123456789abcdef0123456789abcdef"
+                `shouldBe` "0123456789abcdef0123456789abcdef"
+
+        it "reads the key from a file when the value references one" $ do
+            tmpDir <- getTemporaryDirectory
+            let dir  = tmpDir ++ "/output-krdict-spec"
+                path = dir ++ "/test-key"
+            createDirectoryIfMissing True dir
+            writeFile path "abcdef0123456789abcdef0123456789\n"
+            resolveApiKey path `shouldBe` "abcdef0123456789abcdef0123456789"
+            removeFile path
 
 -- | A representative KRDICT search response. KRDICT nests its <item> elements
 -- under <response><document><channel>, so this fixture also exercises the

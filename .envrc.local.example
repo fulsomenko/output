@@ -9,4 +9,6 @@ export OLLAMA_MODEL=gemma3:4b
 
 # KRDICT Open API key (32-char hex). Used by 'output lookup <word>'.
 # Apply at https://krdict.korean.go.kr/eng/openApi. Use the real key in .envrc.local.
+# The value may also be a path to a file containing the key (read at lookup
+# time), e.g. /run/secrets/krdict/api/key.
 export KRDICT_API_KEY=

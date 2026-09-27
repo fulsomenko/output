@@ -31,6 +31,9 @@
           buildInputs = with pkgs; [
             ghc
             cabal-install
+            openssl
+            openssl.dev
+            ca-bundle
             haskellPackages.haskell-language-server
             haskellPackages.hlint
             haskellPackages.stylish-haskell

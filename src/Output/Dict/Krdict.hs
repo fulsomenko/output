@@ -32,6 +32,7 @@ module Output.Dict.Krdict
     , KrdictError(..)
     , krdictLookup
     , krdictParse
+    , resolveApiKey
     , percentEncode
     , krdictWordClass
     , krdictToCard
@@ -51,8 +52,9 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TEnc
 import Network.HTTP.Client
+import Network.HTTP.Client.TLS (newTlsManager)
 import Network.HTTP.Types (statusCode, statusIsSuccessful)
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing, doesFileExist)
 
 import Output.Domain.Types
     ( TOPIK_Level
@@ -124,12 +126,24 @@ percentEncode t = concatMap encodeByte (unpack (TEnc.encodeUtf8 t))
                 lo = hexNib (fromIntegral (b `mod` 16) :: Int)
             in ['%', hi, lo]
 
+-- | Resolve a raw KRDICT_API_KEY value. If the value is a path to an existing
+-- file, it is treated as a reference to a secret file and the key is read
+-- from it (trimmed); otherwise the value is used verbatim. This supports env
+-- setups where the variable points at a secrets path (e.g.
+-- /run/secrets/krdict/api/key) rather than holding the key itself.
+resolveApiKey :: Text -> IO Text
+resolveApiKey v = do
+    isFile <- doesFileExist (T.unpack v)
+    if isFile
+      then T.strip . TEnc.decodeUtf8 <$> BL.readFile (T.unpack v)
+      else pure v
+
 -- | Search KRDICT for a word. Pure body parsing is split out as 'krdictParse'
 -- so it can be unit-tested without any network access.
-krdictLookup :: Text -- ^ API key (the key= query parameter)
+krdictLookup :: Text -- ^ API key (or path to a file holding it), used as key=
              -> Text  -- ^ the word to look up (the q= query parameter)
              -> IO (Either KrdictError [KrdictWord])
-krdictLookup apiKey word = do
+krdictLookup rawKey word = do
     result <- try go
     case result of
         Left (ex :: SomeException) ->
@@ -138,7 +152,10 @@ krdictLookup apiKey word = do
   where
     go :: IO (Either KrdictError [KrdictWord])
     go = do
-        manager <- newManager defaultManagerSettings
+        apiKey <- resolveApiKey rawKey
+        -- Secure requests need a TLS manager; fall back to basic if the
+        -- TLS stack could not be initialised (e.g. no CA store available).
+        manager <- maybe (newManager defaultManagerSettings) pure (newTlsManager)
         let url = "https://krdict.korean.go.kr/api/search"
                 <> "?key=" <> percentEncode apiKey
                 <> "&q=" <> percentEncode word
