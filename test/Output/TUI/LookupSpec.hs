@@ -76,7 +76,16 @@ spec = do
 
     it "starts idle with no input and no note" $
         initialLookupState
-            `shouldBe` LookupState [] LookupIdle Nothing
+            `shouldBe` LookupState [] LookupIdle Nothing []
+
+    describe "toggleSelected" $ do
+        it "adds a word on first press" $
+            toggleSelected initialLookupState sampleWord
+                `shouldBe` initialLookupState { lkSelected = [sampleWord] }
+
+        it "removes a word when pressed again (idempotent)" $
+            toggleSelected (initialLookupState { lkSelected = [sampleWord] }) sampleWord
+                `shouldBe` initialLookupState
 
 -- | A minimal but realistic fixture for a KRDICT entry.
 sampleWord :: KrdictWord

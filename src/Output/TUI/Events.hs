@@ -32,7 +32,13 @@ import Output.Domain.Types
     , TOPIK_Level(..)
     )
 import Output.Domain.Jamo (qwertyToJamo)
-import Output.Dict.Krdict (KrdictError(..), krdictLookup, saveKrdictWord)
+import Output.Dict.Krdict
+    ( KrdictError(..)
+    , KrdictWord(..)
+    , krdictLookup
+    , krdictToCard
+    , saveKrdictWord
+    )
 import Output.Domain.TypingLevel (TypingLevel(..), mainLevels, getSubLevels, hasSubLevels)
 import Output.Domain.TypingWord (TypingWord(..))
 import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), createSessionPrompts, validateTyping, CharStatus(..))
@@ -76,6 +82,7 @@ handleEvent chan ev = do
         SettingsScreen          -> handleSettingsEvent ev
         PersonaScreen           -> handlePersonaEvent ev
         LookupScreen            -> handleLookupEvent chan ev
+        ReviewScreen            -> handleReviewEvent ev
 
 -- | Append an incoming session note to the student profile (disk + in-memory).
 -- The note log is append-only so no past observations are ever lost.
@@ -401,54 +408,65 @@ handleLookupEvent _ (AppEvent (KrdictLookupDone outcome)) = do
     s <- get
     case asLookup s of
         Nothing -> pure ()
-        Just lk -> do
-            let level = maybe One intToLevel (settingsKoreanLevel (asSettings s))
-            case outcome of
-                Left err ->
-                    modify $ \st -> st { asLookup = Just (lk { lkStatus = LookupError err }) }
-                Right words -> do
-                    -- Auto-save (deduped, at the user's TOPIK level) and merge new cards.
-                    saved <- liftIO $ mapM (saveKrdictWord level) words
-                    let newCards = [c | Just c <- saved]
-                        newNote  = case newCards of
-                            [] -> Just "Already in your learned words."
-                            _  -> Just $ "Added " <> T.pack (show (length newCards))
-                                   <> " word(s) to your learned words."
-                    now <- liftIO getCurrentTime
-                    let localNow  = utcToLocalTime utc now
-                        newStates = foldr
-                            (\c m -> Map.insert (vocabId c) (newVocabularyState (vocabId c) localNow) m)
-                            (asVocabStates s)
-                            newCards
-                    modify $ \st -> st
-                        { asLookup      = Just (lk { lkStatus = LookupResults words, lkNote = newNote })
-                        , asVocabCards  = asVocabCards s ++ newCards
-                        , asVocabStates = newStates
-                        }
+        Just lk -> case outcome of
+            Left err ->
+                modify $ \st -> st { asLookup = Just (lk { lkStatus = LookupError err, lkNote = Nothing }) }
+            Right words ->
+                -- Show the results so the user can select them. Nothing is saved
+                -- until they confirm on the review screen (see handleReviewEvent).
+                modify $ \st -> st
+                    { asLookup = Just (lk { lkStatus = LookupResults words, lkNote = Nothing }) }
 
--- Enter: submit the composed word (guarded: non-empty, not already loading)
+-- Enter: with results on screen, proceed to the review screen (if any marked);
+-- otherwise submit the composed word (guarded: non-empty, not already loading).
 handleLookupEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
     s <- get
     case asLookup s of
         Nothing -> pure ()
-        Just lk -> when (lkStatus lk /= LookupLoading && not (null (lkInput lk))) $ do
-            let word = lookupQuery lk
-            modify $ \st -> st { asLookup = Just (submitLookup lk) }
-            liftIO $ void $ forkIO $ do
-                mKey <- lookupEnv "KRDICT_API_KEY"
-                result <- case mKey of
-                    Nothing -> return
-                        (Left (KrdictApiError (T.pack "KRDICT_API_KEY is not set. Put your key in .envrc.local and run: direnv allow")))
-                    Just key -> krdictLookup (T.pack key) word
-                writeBChan chan (KrdictLookupDone (case result of
-                    Left  e -> Left (krdictErrorText e)
-                    Right w -> Right w))
+        Just lk -> case lkStatus lk of
+            LookupResults ws -> do
+                let selected = filter (\w -> kwWord w `elem` map kwWord (lkSelected lk)) ws
+                if null selected
+                    then modify $ \st -> st
+                             { asLookup = Just (lk { lkNote = Just "Mark one or more results with 1-9 first." }) }
+                    else modify $ \st -> st
+                             { asReview  = Just selected
+                             , asScreen  = ReviewScreen
+                             , asMessage = Nothing
+                             }
+            _ -> when (lkStatus lk /= LookupLoading && not (null (lkInput lk))) $ do
+                let word = lookupQuery lk
+                modify $ \st -> st { asLookup = Just (submitLookup lk) }
+                liftIO $ void $ forkIO $ do
+                    mKey <- lookupEnv "KRDICT_API_KEY"
+                    result <- case mKey of
+                        Nothing -> return
+                            (Left (KrdictApiError (T.pack "KRDICT_API_KEY is not set. Put your key in .envrc.local and run: direnv allow")))
+                        Just key -> krdictLookup (T.pack key) word
+                    writeBChan chan (KrdictLookupDone (case result of
+                        Left  e -> Left (krdictErrorText e)
+                        Right w -> Right w))
 
 -- Backspace: remove the last jamo
 handleLookupEvent _ (VtyEvent (V.EvKey V.KBS [])) =
     modify $ \s -> case asLookup s of
         Nothing -> s
         Just lk -> s { asLookup = Just (popJamo lk) }
+
+-- Digit 1-9 (and 0 for the 10th result): mark / un-mark a result to save.
+handleLookupEvent _ (VtyEvent (V.EvKey (V.KChar c) []))
+    | c `elem` ("0123456789" :: String) = do
+        s <- get
+        case asLookup s of
+            Nothing -> pure ()
+            Just lk -> case lkStatus lk of
+                LookupResults ws ->
+                    let idx = if c == '0' then 10 else digitToInt c
+                    in when (idx <= length ws) $
+                        modify $ \st -> case asLookup st of
+                            Just lk' -> st { asLookup = Just (toggleSelected lk' (ws !! (idx - 1))) }
+                            Nothing  -> st
+                _ -> pure ()
 
 -- Letter key: map to a jamo and append to the input
 handleLookupEvent _ (VtyEvent (V.EvKey (V.KChar c) [])) = case qwertyToJamo (toLower c) of
@@ -462,6 +480,86 @@ handleLookupEvent _ (VtyEvent (V.EvKey V.KEsc [])) =
     modify $ \s -> s { asScreen = MainMenuScreen, asLookup = Nothing }
 
 handleLookupEvent _ _ = pure ()
+
+-- ---------------------------------------------------------------------------
+-- Review screen
+-- ---------------------------------------------------------------------------
+
+-- | Persist a KrdictWord list to the learned-words store; new words enter
+-- the SRS pool with a fresh state. Already-saved words are de-duped by the
+-- underlying saveKrdictWord.
+saveWordsToPool :: [KrdictWord] -> EventM Name AppState Int
+saveWordsToPool words = do
+    s <- get
+    let level = maybe One intToLevel (settingsKoreanLevel (asSettings s))
+    saved <- liftIO $ mapM (saveKrdictWord level) words
+    let newCards = [ c | Just c <- saved ]
+    when (not (null newCards)) $ do
+        now <- liftIO getCurrentTime
+        let localNow  = utcToLocalTime utc now
+            newStates = foldr
+                (\c m -> Map.insert (vocabId c) (newVocabularyState (vocabId c) localNow) m)
+                (asVocabStates s)
+                newCards
+        modify $ \st -> st
+            { asVocabCards  = asVocabCards s ++ newCards
+            , asVocabStates = newStates
+            }
+    pure (length newCards)
+
+-- | Start a drill session over an explicit list of cards (bypasses the usual
+-- due-first selection). Used by the review screen's flashcard option.
+startDrillCards :: DrillMode -> [VocabularyCard] -> EventM Name AppState ()
+startDrillCards mode cards = do
+    utcNow <- liftIO getCurrentTime
+    let exType  = case mode of
+            WritingMode -> Writing
+            ReadingMode -> Reading
+            TypingMode  -> Typing
+        prompts = map (generateExercisePrompt exType) cards
+        drill   = (initialDrillState mode prompts) { dsCardStartTime = Just utcNow }
+    modify $ \st -> st
+        { asScreen  = DrillScreen
+        , asDrill   = Just drill
+        , asReview  = Nothing
+        , asMessage = Nothing
+        }
+
+-- | Handle events on the review screen.
+--   F       -> save to pool + start a flashcard drill over the words
+--   Enter   -> save to pool + return to the main menu
+--   Tab     -> cycle through the words (reserved for later)
+--   Esc     -> back to the lookup results without saving
+handleReviewEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+handleReviewEvent (VtyEvent (V.EvKey (V.KChar c) mods))
+    | null mods
+    , c `elem` ("ffFF" :: String) = do
+        s <- get
+        case asReview s of
+            Nothing -> pure ()
+            Just words -> do
+                let level = maybe One intToLevel (settingsKoreanLevel (asSettings s))
+                _ <- saveWordsToPool words
+                let cards = map (krdictToCard level) words
+                startDrillCards ReadingMode cards
+handleReviewEvent (VtyEvent (V.EvKey V.KEnter [])) = do
+    s <- get
+    case asReview s of
+        Nothing -> pure ()
+        Just words -> do
+            added <- saveWordsToPool words
+            let note = if added == 0
+                           then Just "Already in your practice pool."
+                           else Just $ "Added " <> T.pack (show added)
+                                   <> " word(s) to the practice pool."
+            modify $ \st -> st
+                { asReview  = Nothing
+                , asMessage = note
+                , asScreen  = MainMenuScreen
+                }
+handleReviewEvent (VtyEvent (V.EvKey V.KEsc [])) =
+    modify $ \st -> st { asReview = Nothing, asScreen = LookupScreen }
+handleReviewEvent _ = pure ()
 
 -- ---------------------------------------------------------------------------
 -- AI Lesson handlers

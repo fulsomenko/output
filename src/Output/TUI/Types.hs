@@ -35,6 +35,7 @@ module Output.TUI.Types
     , popJamo
     , submitLookup
     , applyLookupOutcome
+    , toggleSelected
       -- * Application State
     , AppState(..)
     , AppEvent(..)
@@ -70,7 +71,7 @@ import Output.Domain.TypingLevel (TypingLevel)
 import Output.Domain.TypingWord (TypingWord)
 import Output.Domain.TypingExercise (TypingExerciseType, TypingPrompt, CharStatus)
 import Output.Domain.Settings (AppSettings, defaultSettings)
-import Output.Dict.Krdict (KrdictWord)
+import Output.Dict.Krdict (KrdictWord (..))
 import Output.LLM.Agent (AgentTask(..))
 import Output.LLM.Persona (Persona)
 import Output.LLM.Extractor (ExtractedWord)
@@ -87,6 +88,7 @@ data Name
     | LevelSelector
     | ChatHistoryViewport
     | LookupViewport
+    | ReviewViewport
     deriving (Show, Eq, Ord)
 
 -- | Application screens
@@ -104,6 +106,7 @@ data Screen
     | SettingsScreen
     | PersonaScreen
     | LookupScreen
+    | ReviewScreen
     deriving (Show, Eq)
 
 -- | Mode of the drill exercise
@@ -274,17 +277,19 @@ data LookupStatus
 
 -- | Live state of the dictionary lookup screen.
 data LookupState = LookupState
-    { lkInput  :: [Jamo]              -- ^ Jamo typed so far (two-beolsik order)
-    , lkStatus :: LookupStatus
-    , lkNote   :: Maybe Text          -- ^ Note after a lookup (e.g. save result)
+    { lkInput    :: [Jamo]              -- ^ Jamo typed so far (two-beolsik order)
+    , lkStatus   :: LookupStatus
+    , lkNote     :: Maybe Text          -- ^ Note after a lookup (e.g. save result)
+    , lkSelected :: [KrdictWord]        -- ^ Results marked (by number) to save
     } deriving (Show, Eq)
 
 -- | Fresh lookup state, empty input.
 initialLookupState :: LookupState
 initialLookupState = LookupState
-    { lkInput  = []
-    , lkStatus = LookupIdle
-    , lkNote   = Nothing
+    { lkInput    = []
+    , lkStatus   = LookupIdle
+    , lkNote     = Nothing
+    , lkSelected = []
     }
 
 -- | The currently typed word, composed in real time from the jamo.
@@ -304,14 +309,26 @@ popJamo s
 -- | Enter is pressed: reset to loading, drop any stale note.
 submitLookup :: LookupState -> LookupState
 submitLookup s = s
-    { lkStatus = LookupLoading
-    , lkNote   = Nothing
+    { lkStatus   = LookupLoading
+    , lkNote     = Nothing
+    , lkSelected = []
     }
 
 -- | Apply a finished lookup outcome to the state.
 applyLookupOutcome :: Either Text [KrdictWord] -> LookupState -> LookupState
-applyLookupOutcome (Right words) s = s { lkStatus = LookupResults words, lkNote = Nothing }
-applyLookupOutcome (Left err)   s = s { lkStatus = LookupError err,   lkNote = Nothing }
+applyLookupOutcome (Right wds) s =
+    s { lkStatus = LookupResults wds, lkNote = Nothing, lkSelected = [] }
+applyLookupOutcome (Left err)   s =
+    s { lkStatus = LookupError err,   lkNote = Nothing, lkSelected = [] }
+
+-- | Toggle one result in the selection. Matching is by the headword text, so
+-- marking is idempotent (pressing the number again un-marks it).
+toggleSelected :: LookupState -> KrdictWord -> LookupState
+toggleSelected s w
+    | kwWord w `elem` map kwWord (lkSelected s) =
+        s { lkSelected = [ x | x <- lkSelected s, kwWord x /= kwWord w ] }
+    | otherwise =
+        s { lkSelected = lkSelected s ++ [w] }
 
 -- | Custom events for the application
 data AppEvent
@@ -349,6 +366,7 @@ data AppState = AppState
     , asPersonaEdit   :: Maybe (PersonaEditField, Text) -- Active persona field edit
     , asStudentProfile :: Maybe StudentProfile          -- Cumulative student brief
     , asLookup :: Maybe LookupState                      -- Active dictionary lookup session
+    , asReview :: Maybe [KrdictWord]                     -- Words pending the review screen
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -376,6 +394,7 @@ initialAppState = AppState
     , asPersonaEdit    = Nothing
     , asStudentProfile = Nothing
     , asLookup         = Nothing
+    , asReview         = Nothing
     }
 
 -- | Attribute names for styling

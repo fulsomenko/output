@@ -10,8 +10,9 @@ import Brick.Widgets.Border.Style
 import Brick.Widgets.Center
 import qualified Data.Text as T
 import Data.Text (Text)
+import Data.Char (ord)
 import Data.List (sortBy, nub, intersperse)
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Time (localDay)
 import Data.Time.Calendar (Day, diffDays)
 import Data.Time.Format (formatTime, defaultTimeLocale)
@@ -57,6 +58,9 @@ drawUI s = [ui]
         LookupScreen   -> case asLookup s of
             Just lk -> drawLookup s lk
             Nothing -> drawMainMenu s
+        ReviewScreen   -> case asReview s of
+            Just words -> drawReview s words
+            Nothing    -> drawMainMenu s
 
 -- | Shared status bar shown at the bottom of every screen
 statusBar :: AppState -> Text -> Widget Name
@@ -608,10 +612,14 @@ drawLookup s lk =
                 , padTop (Pad 1) $ drawLookupStatus lk
                 ]
         , fill ' '
-        , statusBar s "[type] two-beolsik  [⌫] delete  [Enter] look up  [Esc] back"
+        , statusBar s hint
         ]
   where
     cursor = if lkStatus lk == LookupLoading then "" else "│"
+    hint
+        | isResults = "[type]  [⌫]  [1-9/0] mark  [Enter] review marked  [Esc] back"
+        | otherwise = "[type] two-beolsik  [⌫] delete  [Enter] look up  [Esc] back"
+    isResults = case lkStatus lk of LookupResults _ -> True; _ -> False
 
 -- | Draw the idle/loading/error/results status area of the lookup screen.
 drawLookupStatus :: LookupState -> Widget Name
@@ -624,22 +632,41 @@ drawLookupStatus lk = case lkStatus lk of
         vBox
             [ if null words
                 then withAttr hintAttr $ txt "No results."
-                else vBox (map drawLookupWord words)
+                else vBox $ [ drawLookupWord (i + 1) (kwWord w `elem` markedWords) w
+                            | (i, w) <- zip [0 ..] words ]
+            , if null words
+                then emptyWidget
+                else padTop (Pad 1) $ withAttr statsAttr $ txt $
+                    "Marked " <> T.pack (show (length markedWords))
+                    <> " of " <> T.pack (show (length words))
             , padTop (Pad 1) $ case lkNote lk of
                 Just n  -> withAttr hintAttr $ txt n
                 Nothing -> emptyWidget
             ]
+      where
+        markedWords = map kwWord (lkSelected lk)
 
--- | Draw one KRDICT word entry: headword, part of speech, senses.
-drawLookupWord :: KrdictWord -> Widget Name
-drawLookupWord w =
+-- | Draw one KRDICT word entry: numbered headword, mark indicator, part of
+-- speech, and senses. @idx@ is the 1-based result position (only keys 1-9 and
+-- 0 exist, so positions beyond 10 render without a number).
+drawLookupWord :: Int -> Bool -> KrdictWord -> Widget Name
+drawLookupWord idx selected w =
+    applyIf selected (withAttr menuSelectedAttr) $
     padBottom (Pad 2) $ vBox
-        [ hBox $ [ withAttr promptAttr $ txt (kwWord w), txt "  " ]
+        [ hBox $ [ withAttr promptAttr $ txt $ badge <> ". " <> kwWord w
+                 , txt "  "
+                 , withAttr (if selected then correctAttr else hintAttr) $ txt mark
+                 ]
             ++ concatMap (\t -> [txt "  ·  ", withAttr hintAttr $ txt t]) metaBits
         , vBox (map drawLookupSense (kwSenses w))
         ]
   where
     metaBits = [ t | t <- [kwPos w, kwWordGrade w], not (T.null t) ]
+    mark = if selected then "● marked" else "   "
+    badge
+        | idx == 10   = "0"
+        | idx >= 1    = T.pack [ toEnum (ord '0' + (idx - 1)) ]
+        | otherwise   = ""
 
 -- | Draw one sense: ordered definition plus (if present) the English translation.
 drawLookupSense :: KrdictSense -> Widget Name
@@ -649,6 +676,39 @@ drawLookupSense sens = vBox
         Just  t -> withAttr hintAttr $ txt $ "English: " <> ktWord t <> "  (" <> ktDfn t <> ")"
         Nothing -> withAttr hintAttr $ txt "English: (no translation provided)"
         ]
+
+-- | Draw the review screen: the marked words, ready to save into the practice
+-- pool or to practice as flashcards.
+drawReview :: AppState -> [KrdictWord] -> Widget Name
+drawReview s words =
+    withBorderStyle unicodeBold $
+    vBox
+        [ borderWithLabel (withAttr titleAttr $ txt " Review Words to Save ") $
+            viewport ReviewViewport Vertical $
+            padAll 1 $ vBox
+                [ withAttr promptAttr $ txt $
+                    "You marked " <> T.pack (show (length words))
+                    <> " word(s) to save."
+                , padTop (Pad 1) $ withAttr statsAttr $ txt $
+                    "Will be saved at level: TOPIK " <> T.pack (show level)
+                , padTop (Pad 1) $ vBox [ drawReviewWord w | w <- words ]
+                ]
+        , fill ' '
+        , statusBar s "[F] Flashcards  [Enter] Save to pool  [Esc] Back"
+        ]
+  where
+    level = fromMaybe 1 (settingsKoreanLevel (asSettings s))
+
+-- | Draw one marked word on the review screen.
+drawReviewWord :: KrdictWord -> Widget Name
+drawReviewWord w =
+    padBottom (Pad 2) $ vBox
+        [ hBox $ [ withAttr promptAttr $ txt (kwWord w), txt "  " ]
+            ++ concatMap (\t -> [txt "  ·  ", withAttr hintAttr $ txt t]) metaBits
+        , vBox (map drawLookupSense (kwSenses w))
+        ]
+  where
+    metaBits = [ t | t <- [kwPos w, kwWordGrade w], not (T.null t) ]
 
 -- | Draw the settings screen.
 drawSettings :: AppState -> Widget Name
