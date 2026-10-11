@@ -183,7 +183,7 @@ resolveApiKeyChecked raw =
   where
     isPathLike t = T.any (== '/') t || T.isPrefixOf "~" t || T.isPrefixOf "." t
     validKey   t = T.length t == 32 && T.all isHex t
-    isHex c     = isDigit c || c `elem` "abcdefABCDEF"
+    isHex      c = isDigit c || c `elem` ("abcdefABCDEF" :: String)
 
 -- | Search KRDICT for a word. Pure body parsing is split out as 'krdictParse'
 -- so it can be unit-tested without any network access.
