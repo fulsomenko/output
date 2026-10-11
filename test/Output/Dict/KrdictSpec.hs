@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- | Tests for the pure parts of the KRDICT integration: XML parsing,
 -- part-of-speech mapping, card building and percent-encoding. None of these
@@ -157,27 +158,34 @@ spec = do
     -- KrdictConfigError instead of an opaque KRDICT server error -- the
     -- exact failures an empty / mis-pointed KRDICT_API_KEY produces.
     describe "resolveApiKeyChecked" $ do
+        let
+            -- Assert a value is rejected with a precise KrdictConfigError
+            -- (the message content is implementation detail; only the variant
+            -- is asserted here, matching by pattern to avoid type holes).
+            configErr :: Text -> Expectation
+            configErr raw = do
+                res <- resolveApiKeyChecked raw
+                res `shouldSatisfy` \case
+                    Left (KrdictConfigError _msg) -> True
+                    _                             -> False
+
         it "accepts a bare 32-character hex key" $
             resolveApiKeyChecked "0123456789abcdef0123456789abcdef"
                 `shouldReturn` (Right "0123456789abcdef0123456789abcdef")
 
         it "rejects an empty (or whitespace-only) value" $
-            resolveApiKeyChecked "   "
-                `shouldReturn` (Left (KrdictConfigError _))
+            configErr "   "
 
         it "rejects a bare value that is not a 32-character hex key" $
-            resolveApiKeyChecked "not-a-key"
-                `shouldReturn` (Left (KrdictConfigError _))
+            configErr "not-a-key"
 
         it "rejects a secret file that does not exist" $
-            resolveApiKeyChecked "dist-newstyle/.krdict-spec-missing"
-                `shouldReturn` (Left (KrdictConfigError _))
+            configErr "dist-newstyle/.krdict-spec-missing"
 
         it "rejects a secret file that is empty" $ do
             let path = "dist-newstyle/.krdict-spec-empty"
             writeFile path ""
-            resolveApiKeyChecked (T.pack path)
-                `shouldReturn` (Left (KrdictConfigError _))
+            configErr (T.pack path)
 
         it "resolves a 32-character hex key from a file" $ do
             let path = "dist-newstyle/.krdict-spec-key"
