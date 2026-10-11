@@ -31,11 +31,14 @@ module Output.TUI.Types
     , LookupState(..)
     , initialLookupState
     , lookupQuery
+    , lookupResults
     , applyJamo
     , popJamo
     , submitLookup
     , applyLookupOutcome
-    , toggleSelected
+    , moveCursor
+    , isSavedWord
+    , saveHighlighted
       -- * Application State
     , AppState(..)
     , AppEvent(..)
@@ -88,7 +91,6 @@ data Name
     | LevelSelector
     | ChatHistoryViewport
     | LookupViewport
-    | ReviewViewport
     deriving (Show, Eq, Ord)
 
 -- | Application screens
@@ -106,7 +108,6 @@ data Screen
     | SettingsScreen
     | PersonaScreen
     | LookupScreen
-    | ReviewScreen
     deriving (Show, Eq)
 
 -- | Mode of the drill exercise
@@ -276,25 +277,40 @@ data LookupStatus
     deriving (Show, Eq)
 
 -- | Live state of the dictionary lookup screen.
+--
+-- Two input modes, mirroring the chat screen: InsertMode types the query in
+-- two-beolsik; NormalMode browses the results (j/k or the arrows move the
+-- cursor, Space or Enter saves the highlighted word). 'lkSaved' tracks the
+-- headwords saved this session so the UI can badge them as saved.
 data LookupState = LookupState
     { lkInput    :: [Jamo]              -- ^ Jamo typed so far (two-beolsik order)
     , lkStatus   :: LookupStatus
-    , lkNote     :: Maybe Text          -- ^ Note after a lookup (e.g. save result)
-    , lkSelected :: [KrdictWord]        -- ^ Results marked (by number) to save
+    , lkNote     :: Maybe Text          -- ^ Feedback note (e.g. a save result)
+    , lkMode     :: InputMode           -- ^ InsertMode = typing query; NormalMode = browsing
+    , lkCursor   :: Int                 -- ^ 0-based index of the highlighted result
+    , lkSaved    :: [Text]              -- ^ Headwords saved this session (drives the badge)
     } deriving (Show, Eq)
 
--- | Fresh lookup state, empty input.
+-- | Fresh lookup state: empty input, ready to type.
 initialLookupState :: LookupState
 initialLookupState = LookupState
     { lkInput    = []
     , lkStatus   = LookupIdle
     , lkNote     = Nothing
-    , lkSelected = []
+    , lkMode     = InsertMode
+    , lkCursor   = 0
+    , lkSaved    = []
     }
 
 -- | The currently typed word, composed in real time from the jamo.
 lookupQuery :: LookupState -> Text
 lookupQuery = composeJamoSequence . lkInput
+
+-- | The words currently on screen (empty unless the status holds a result set).
+lookupResults :: LookupState -> [KrdictWord]
+lookupResults s = case lkStatus s of
+    LookupResults w -> w
+    _               -> []
 
 -- | Append one jamo to the input.
 applyJamo :: LookupState -> Jamo -> LookupState
@@ -306,29 +322,59 @@ popJamo s
     | null (lkInput s)  = s
     | otherwise         = s { lkInput = init (lkInput s) }
 
--- | Enter is pressed: reset to loading, drop any stale note.
+-- | Enter is pressed while typing: reset to loading, drop any stale note and
+-- start selection over for the next result set.
 submitLookup :: LookupState -> LookupState
 submitLookup s = s
     { lkStatus   = LookupLoading
     , lkNote     = Nothing
-    , lkSelected = []
+    , lkCursor   = 0
+    , lkSaved    = []
     }
 
--- | Apply a finished lookup outcome to the state.
+-- | Apply a finished lookup outcome, switching to NormalMode so the user can
+-- browse and save the results (or read the error / suggestion).
 applyLookupOutcome :: Either Text [KrdictWord] -> LookupState -> LookupState
 applyLookupOutcome (Right wds) s =
-    s { lkStatus = LookupResults wds, lkNote = Nothing, lkSelected = [] }
+    s { lkStatus = LookupResults wds, lkNote = Nothing, lkMode = NormalMode, lkCursor = 0, lkSaved = [] }
 applyLookupOutcome (Left err)   s =
-    s { lkStatus = LookupError err,   lkNote = Nothing, lkSelected = [] }
+    s { lkStatus = LookupError err,   lkNote = Nothing, lkMode = NormalMode, lkCursor = 0, lkSaved = [] }
 
--- | Toggle one result in the selection. Matching is by the headword text, so
--- marking is idempotent (pressing the number again un-marks it).
-toggleSelected :: LookupState -> KrdictWord -> LookupState
-toggleSelected s w
-    | kwWord w `elem` map kwWord (lkSelected s) =
-        s { lkSelected = [ x | x <- lkSelected s, kwWord x /= kwWord w ] }
+-- | Move the highlight by 'delta' (pass +1 for j / down, -1 for k / up),
+-- clamped to the visible results. A no-op when there is no result set.
+moveCursor :: Int -> LookupState -> LookupState
+moveCursor delta s
+    | null rs   = s
+    | otherwise = s { lkCursor = clamp 0 (n - 1) (lkCursor s + delta) }
+  where
+    rs    = lookupResults s
+    n     = length rs
+    clamp lo hi x = max lo (min hi x)
+
+-- | Whether a result's headword was already saved this session (drives the badge).
+isSavedWord :: LookupState -> KrdictWord -> Bool
+isSavedWord s w = kwWord w `elem` lkSaved s
+
+-- | Record the highlighted word as saved and advance the cursor to the next
+-- result (clamped at the end). Returns the saved word so the caller can
+-- persist it. A no-op when there is no result set.
+saveHighlighted :: LookupState -> (LookupState, Maybe KrdictWord)
+saveHighlighted s
+    | null rs   = (s, Nothing)
     | otherwise =
-        s { lkSelected = lkSelected s ++ [w] }
+        let i      = max 0 (min (n - 1) (lkCursor s))
+            w      = rs !! i
+            saved' = if kwWord w `elem` lkSaved s
+                         then lkSaved s
+                         else lkSaved s ++ [kwWord w]
+        in ( s { lkSaved  = saved'
+              , lkCursor = min (n - 1) (i + 1)
+              }
+           , Just w
+           )
+  where
+    rs = lookupResults s
+    n  = length rs
 
 -- | Custom events for the application
 data AppEvent
@@ -366,7 +412,6 @@ data AppState = AppState
     , asPersonaEdit   :: Maybe (PersonaEditField, Text) -- Active persona field edit
     , asStudentProfile :: Maybe StudentProfile          -- Cumulative student brief
     , asLookup :: Maybe LookupState                      -- Active dictionary lookup session
-    , asReview :: Maybe [KrdictWord]                     -- Words pending the review screen
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -394,7 +439,6 @@ initialAppState = AppState
     , asPersonaEdit    = Nothing
     , asStudentProfile = Nothing
     , asLookup         = Nothing
-    , asReview         = Nothing
     }
 
 -- | Attribute names for styling

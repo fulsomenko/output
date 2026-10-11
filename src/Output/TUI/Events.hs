@@ -36,7 +36,6 @@ import Output.Dict.Krdict
     ( KrdictError(..)
     , KrdictWord(..)
     , krdictLookup
-    , krdictToCard
     , saveKrdictWord
     )
 import Output.Domain.TypingLevel (TypingLevel(..), mainLevels, getSubLevels, hasSubLevels)
@@ -82,7 +81,6 @@ handleEvent chan ev = do
         SettingsScreen          -> handleSettingsEvent ev
         PersonaScreen           -> handlePersonaEvent ev
         LookupScreen            -> handleLookupEvent chan ev
-        ReviewScreen            -> handleReviewEvent ev
 
 -- | Append an incoming session note to the student profile (disk + in-memory).
 -- The note log is append-only so no past observations are ever lost.
@@ -399,87 +397,104 @@ krdictErrorText (KrdictConfigError t) = t
 
 -- | Handle events on the dictionary lookup screen.
 --
--- Input is two-beolsik: a-z keys map to jamo (existing qwertyToJamo mapping)
--- and compose into syllables in real time as you type.
--- Enter fetches from KRDICT asynchronously (BChan + forkIO); on success the
--- word is auto-saved to the learned vocabulary, deduped by word.
+-- Two modes, mirroring the chat screen:
+--   * Insert mode - the query is typed in two-beolsik (a-z -> jamo).
+--   * Normal mode - after a lookup; j/k (or the arrows) move the highlight
+--     over the results, Space/Enter saves the highlighted word and advances,
+--     i resumes editing the query.
+--
+-- Enter in Insert mode fetches from KRDICT asynchronously (BChan + forkIO).
 handleLookupEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
+-- Async lookup result arrived: fold it in and switch to NormalMode.
 handleLookupEvent _ (AppEvent (KrdictLookupDone outcome)) = do
     s <- get
     case asLookup s of
         Nothing -> pure ()
-        Just lk -> case outcome of
-            Left err ->
-                modify $ \st -> st { asLookup = Just (lk { lkStatus = LookupError err, lkNote = Nothing }) }
-            Right words ->
-                -- Show the results so the user can select them. Nothing is saved
-                -- until they confirm on the review screen (see handleReviewEvent).
-                modify $ \st -> st
-                    { asLookup = Just (lk { lkStatus = LookupResults words, lkNote = Nothing }) }
-
--- Enter: with results on screen, proceed to the review screen (if any marked);
--- otherwise submit the composed word (guarded: non-empty, not already loading).
-handleLookupEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
+        Just lk -> modify $ \st -> st { asLookup = Just (applyLookupOutcome outcome lk) }
+-- Key events: route by input mode.
+handleLookupEvent chan ev = do
     s <- get
     case asLookup s of
         Nothing -> pure ()
-        Just lk -> case lkStatus lk of
-            LookupResults ws -> do
-                let selected = filter (\w -> kwWord w `elem` map kwWord (lkSelected lk)) ws
-                if null selected
-                    then modify $ \st -> st
-                             { asLookup = Just (lk { lkNote = Just "Mark one or more results with 1-9 first." }) }
-                    else modify $ \st -> st
-                             { asReview  = Just selected
-                             , asScreen  = ReviewScreen
-                             , asMessage = Nothing
-                             }
-            _ -> when (lkStatus lk /= LookupLoading && not (null (lkInput lk))) $ do
-                let word = lookupQuery lk
-                modify $ \st -> st { asLookup = Just (submitLookup lk) }
-                liftIO $ void $ forkIO $ do
-                    mKey <- lookupEnv "KRDICT_API_KEY"
-                    result <- case mKey of
-                        Nothing -> return
-                            (Left (KrdictApiError (T.pack "KRDICT_API_KEY is not set. Put your key in .envrc.local and run: direnv allow")))
-                        Just key -> krdictLookup (T.pack key) word
-                    writeBChan chan (KrdictLookupDone (case result of
-                        Left  e -> Left (krdictErrorText e)
-                        Right w -> Right w))
+        Just lk -> case lkMode lk of
+            InsertMode -> handleLookupInsert chan ev lk
+            NormalMode -> handleLookupNormal ev lk
 
--- Backspace: remove the last jamo
-handleLookupEvent _ (VtyEvent (V.EvKey V.KBS [])) =
-    modify $ \s -> case asLookup s of
-        Nothing -> s
-        Just lk -> s { asLookup = Just (popJamo lk) }
+-- | Insert mode: the query is being typed (two-beolsik).
+handleLookupInsert :: BChan AppEvent -> BrickEvent Name AppEvent -> LookupState -> EventM Name AppState ()
+-- Enter: submit the composed word (guarded: non-empty, not already loading).
+handleLookupInsert chan (VtyEvent (V.EvKey V.KEnter [])) lk
+    | lkStatus lk == LookupLoading || null (lkInput lk) = pure ()
+    | otherwise = submitLookupQuery chan lk
+-- Backspace: drop the last jamo.
+handleLookupInsert _ (VtyEvent (V.EvKey V.KBS [])) lk =
+    modify $ \st -> st { asLookup = Just (popJamo lk) }
+-- A letter: map to a jamo and append it to the input.
+handleLookupInsert _ (VtyEvent (V.EvKey (V.KChar c) [])) lk =
+    case qwertyToJamo (toLower c) of
+        Nothing -> pure ()
+        Just j  -> modify $ \st -> st { asLookup = Just (applyJamo lk j) }
+-- Esc: leave if we have not looked up yet; otherwise drop back to browser mode.
+handleLookupInsert _ (VtyEvent (V.EvKey V.KEsc [])) lk =
+    case lkStatus lk of
+        LookupIdle    -> modify $ \st -> st { asScreen = MainMenuScreen, asLookup = Nothing }
+        LookupLoading -> modify $ \st -> st { asScreen = MainMenuScreen, asLookup = Nothing }
+        _             -> modify $ \st -> st { asLookup = Just (lk { lkMode = NormalMode }) }
+handleLookupInsert _ _ _ = pure ()
 
--- Digit 1-9 (and 0 for the 10th result): mark / un-mark a result to save.
-handleLookupEvent _ (VtyEvent (V.EvKey (V.KChar c) []))
-    | c `elem` ("0123456789" :: String) = do
-        s <- get
-        case asLookup s of
-            Nothing -> pure ()
-            Just lk -> case lkStatus lk of
-                LookupResults ws ->
-                    let idx = if c == '0' then 10 else digitToInt c
-                    in when (idx <= length ws) $
-                        modify $ \st -> case asLookup st of
-                            Just lk' -> st { asLookup = Just (toggleSelected lk' (ws !! (idx - 1))) }
-                            Nothing  -> st
-                _ -> pure ()
+-- | Normal mode: browse the results and save them.
+handleLookupNormal :: BrickEvent Name AppEvent -> LookupState -> EventM Name AppState ()
+-- j / down arrow: next result.
+handleLookupNormal (VtyEvent (V.EvKey (V.KChar 'j') [])) lk =
+    modify $ \st -> st { asLookup = Just (moveCursor 1 lk) }
+handleLookupNormal (VtyEvent (V.EvKey V.KDown [])) lk =
+    modify $ \st -> st { asLookup = Just (moveCursor 1 lk) }
+-- k / up arrow: previous result.
+handleLookupNormal (VtyEvent (V.EvKey (V.KChar 'k') [])) lk =
+    modify $ \st -> st { asLookup = Just (moveCursor (-1) lk) }
+handleLookupNormal (VtyEvent (V.EvKey V.KUp [])) lk =
+    modify $ \st -> st { asLookup = Just (moveCursor (-1) lk) }
+-- Space / Enter: save the highlighted word and advance.
+handleLookupNormal _ (VtyEvent (V.EvKey (V.KChar ' ') [])) lk =
+    saveCurrentWord lk
+handleLookupNormal _ (VtyEvent (V.EvKey V.KEnter [])) lk =
+    saveCurrentWord lk
+-- i: resume editing the query.
+handleLookupNormal _ (VtyEvent (V.EvKey (V.KChar 'i') [])) lk =
+    modify $ \st -> st { asLookup = Just (lk { lkMode = InsertMode }) }
+-- Esc: leave the lookup screen.
+handleLookupNormal _ (VtyEvent (V.EvKey V.KEsc [])) _ =
+    modify $ \st -> st { asScreen = MainMenuScreen, asLookup = Nothing }
+handleLookupNormal _ _ _ = pure ()
 
--- Letter key: map to a jamo and append to the input
-handleLookupEvent _ (VtyEvent (V.EvKey (V.KChar c) [])) = case qwertyToJamo (toLower c) of
-    Nothing -> pure ()
-    Just j  -> modify $ \s -> case asLookup s of
-        Nothing -> s
-        Just lk -> s { asLookup = Just (applyJamo lk j) }
+-- | Submit the composed word to KRDICT in the background and feed the outcome
+-- back through the BChan when it lands.
+submitLookupQuery :: BChan AppEvent -> LookupState -> EventM Name AppState ()
+submitLookupQuery chan lk = do
+    let word = lookupQuery lk
+    modify $ \st -> st { asLookup = Just (submitLookup lk) }
+    liftIO $ void $ forkIO $ do
+        mKey <- lookupEnv "KRDICT_API_KEY"
+        result <- case mKey of
+            Nothing -> return
+                (Left (KrdictApiError (T.pack "KRDICT_API_KEY is not set. Put your key in .envrc.local and run: direnv allow")))
+            Just key -> krdictLookup (T.pack key) word
+        writeBChan chan (KrdictLookupDone (case result of
+            Left  e -> Left (krdictErrorText e)
+            Right w -> Right w))
 
--- Esc: back to the main menu
-handleLookupEvent _ (VtyEvent (V.EvKey V.KEsc [])) =
-    modify $ \s -> s { asScreen = MainMenuScreen, asLookup = Nothing }
-
-handleLookupEvent _ _ = pure ()
+-- | Save the highlighted word to the practice pool and show a feedback note.
+saveCurrentWord :: LookupState -> EventM Name AppState ()
+saveCurrentWord lk = do
+    let (lk', mw) = saveHighlighted lk
+    case mw of
+        Nothing -> pure ()
+        Just w -> do
+            added <- saveWordsToPool [w]
+            let note = if added == 0
+                           then Just $ "Already in your pool: " <> kwWord w
+                           else Just $ "Saved " <> kwWord w <> " to your practice pool."
+            modify $ \st -> st { asLookup = Just (lk' { lkNote = note }) }
 
 -- ---------------------------------------------------------------------------
 -- Review screen
@@ -506,60 +521,6 @@ saveWordsToPool words = do
             , asVocabStates = newStates
             }
     pure (length newCards)
-
--- | Start a drill session over an explicit list of cards (bypasses the usual
--- due-first selection). Used by the review screen's flashcard option.
-startDrillCards :: DrillMode -> [VocabularyCard] -> EventM Name AppState ()
-startDrillCards mode cards = do
-    utcNow <- liftIO getCurrentTime
-    let exType  = case mode of
-            WritingMode -> Writing
-            ReadingMode -> Reading
-            TypingMode  -> Typing
-        prompts = map (generateExercisePrompt exType) cards
-        drill   = (initialDrillState mode prompts) { dsCardStartTime = Just utcNow }
-    modify $ \st -> st
-        { asScreen  = DrillScreen
-        , asDrill   = Just drill
-        , asReview  = Nothing
-        , asMessage = Nothing
-        }
-
--- | Handle events on the review screen.
---   F       -> save to pool + start a flashcard drill over the words
---   Enter   -> save to pool + return to the main menu
---   Tab     -> cycle through the words (reserved for later)
---   Esc     -> back to the lookup results without saving
-handleReviewEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
-handleReviewEvent (VtyEvent (V.EvKey (V.KChar c) mods))
-    | null mods
-    , c `elem` ("ffFF" :: String) = do
-        s <- get
-        case asReview s of
-            Nothing -> pure ()
-            Just words -> do
-                let level = maybe One intToLevel (settingsKoreanLevel (asSettings s))
-                _ <- saveWordsToPool words
-                let cards = map (krdictToCard level) words
-                startDrillCards ReadingMode cards
-handleReviewEvent (VtyEvent (V.EvKey V.KEnter [])) = do
-    s <- get
-    case asReview s of
-        Nothing -> pure ()
-        Just words -> do
-            added <- saveWordsToPool words
-            let note = if added == 0
-                           then Just "Already in your practice pool."
-                           else Just $ "Added " <> T.pack (show added)
-                                   <> " word(s) to the practice pool."
-            modify $ \st -> st
-                { asReview  = Nothing
-                , asMessage = note
-                , asScreen  = MainMenuScreen
-                }
-handleReviewEvent (VtyEvent (V.EvKey V.KEsc [])) =
-    modify $ \st -> st { asReview = Nothing, asScreen = LookupScreen }
-handleReviewEvent _ = pure ()
 
 -- ---------------------------------------------------------------------------
 -- AI Lesson handlers
