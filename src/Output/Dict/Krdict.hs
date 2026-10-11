@@ -40,6 +40,7 @@ module Output.Dict.Krdict
     , englishTranslation
     , englishTranslations
     , saveKrdictWord
+    , isNoResultsError
     ) where
 
 import Control.Exception (try, SomeException)
@@ -97,6 +98,15 @@ data KrdictError
     | KrdictParseError Text   -- ^ the response body was not valid KRDICT XML
     | KrdictConfigError Text  -- ^ the API key / secret could not be resolved
     deriving (Show, Eq)
+
+-- | Prefix shared by the "dictionary had no entry for this word" error.
+noResultsPrefix :: Text
+noResultsPrefix = "no KRDICT results for "
+
+-- | Whether an error message carries that "no entry found" meaning (and not a
+-- transport, parse, or configuration failure).
+isNoResultsError :: Text -> Bool
+isNoResultsError = T.isPrefixOf noResultsPrefix
 
 -- ---------------------------------------------------------------------------
 -- Public API
@@ -239,7 +249,7 @@ krdictLookup rawKey word = do
                         Left e  -> pure $ Left (KrdictParseError ("could not parse KRDICT response: " <> e))
                         Right ws ->
                             if null ws
-                                then pure $ Left (KrdictApiError ("no KRDICT results for " <> word))
+                                then pure $ Left (KrdictApiError (noResultsPrefix <> word))
                                 else pure (Right ws)
 
 -- | Parse a KRDICT XML response body into its list of words. Pure.

@@ -624,18 +624,25 @@ drawLookupStatus lk = case lkStatus lk of
     LookupIdle    -> withAttr hintAttr $
         txt "Type a Korean word (two-beolsik) and press Enter to look it up."
     LookupLoading -> withAttr hintAttr $ txt "⏳ Looking up in KRDICT..."
-    LookupError e -> withAttr incorrectAttr $ txtWrap $ "Error: " <> e
-    LookupResults words ->
+    LookupError e -> case lkSuggestions lk of
+        [] -> withAttr incorrectAttr $ txtWrap $ "Error: " <> e
+        wds -> vBox
+            [ withAttr incorrectAttr $ txtWrap $ "Error: " <> e
+            , padTop (Pad 1) $ withAttr hintAttr $
+                txt $ "Did you mean  " <> T.intercalate "  ·  " wds
+                    <> "      [Enter] look up first   [i] type it yourself"
+            ]
+    LookupResults wds ->
         vBox
-            [ if null words
+            [ if null wds
                 then withAttr hintAttr $ txt "No results."
                 else vBox $ [ drawLookupWord (i == lkCursor lk) (isSavedWord lk w) w
-                            | (i, w) <- zip [0 ..] words ]
-            , if null words
+                            | (i, w) <- zip [0 ..] wds ]
+            , if null wds
                 then emptyWidget
                 else padTop (Pad 1) $ withAttr statsAttr $ txt $
                     "Saved " <> T.pack (show (length (lkSaved lk)))
-                    <> " of " <> T.pack (show (length words))
+                    <> " of " <> T.pack (show (length wds))
             , padTop (Pad 1) $ case lkNote lk of
                 Just n  -> withAttr hintAttr $ txt n
                 Nothing -> emptyWidget

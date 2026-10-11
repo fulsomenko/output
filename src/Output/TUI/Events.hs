@@ -35,9 +35,11 @@ import Output.Domain.Jamo (qwertyToJamo)
 import Output.Dict.Krdict
     ( KrdictError(..)
     , KrdictWord(..)
+    , isNoResultsError
     , krdictLookup
     , saveKrdictWord
     )
+import Output.Dict.Suggest (loadLocalWords, suggestions)
 import Output.Domain.TypingLevel (TypingLevel(..), mainLevels, getSubLevels, hasSubLevels)
 import Output.Domain.TypingWord (TypingWord(..))
 import Output.Domain.TypingExercise (TypingExerciseType(..), TypingPrompt(..), createSessionPrompts, validateTyping, CharStatus(..))
@@ -410,7 +412,16 @@ handleLookupEvent _ (AppEvent (KrdictLookupDone outcome)) = do
     s <- get
     case asLookup s of
         Nothing -> pure ()
-        Just lk -> modify $ \st -> st { asLookup = Just (applyLookupOutcome outcome lk) }
+        Just lk -> do
+            let lk' = applyLookupOutcome outcome lk
+            sugg <- case outcome of
+                Left err
+                    | isNoResultsError err ->
+                        do pool <- liftIO loadLocalWords
+                           pure (suggestions pool (lookupQuery lk))
+                    | otherwise            -> pure []
+                Right _                    -> pure []
+            modify $ \st -> st { asLookup = Just (lk' { lkSuggestions = sugg }) }
 -- Key events: route by input mode.
 handleLookupEvent chan ev = do
     s <- get
@@ -418,7 +429,7 @@ handleLookupEvent chan ev = do
         Nothing -> pure ()
         Just lk -> case lkMode lk of
             InsertMode -> handleLookupInsert chan ev lk
-            NormalMode -> handleLookupNormal ev lk
+            NormalMode -> handleLookupNormal chan ev lk
 
 -- | Insert mode: the query is being typed (two-beolsik).
 handleLookupInsert :: BChan AppEvent -> BrickEvent Name AppEvent -> LookupState -> EventM Name AppState ()
@@ -442,23 +453,24 @@ handleLookupInsert _ (VtyEvent (V.EvKey V.KEsc [])) lk =
         _             -> modify $ \st -> st { asLookup = Just (lk { lkMode = NormalMode }) }
 handleLookupInsert _ _ _ = pure ()
 
--- | Normal mode: browse the results and save them.
-handleLookupNormal :: BrickEvent Name AppEvent -> LookupState -> EventM Name AppState ()
+-- | Normal mode: browse the results and save them, or fall back to a
+-- "did you mean" suggestion when the lookup found nothing.
+handleLookupNormal :: BChan AppEvent -> BrickEvent Name AppEvent -> LookupState -> EventM Name AppState ()
 -- j / down arrow: next result.
-handleLookupNormal (VtyEvent (V.EvKey (V.KChar 'j') [])) lk =
+handleLookupNormal _ (VtyEvent (V.EvKey (V.KChar 'j') [])) lk =
     modify $ \st -> st { asLookup = Just (moveCursor 1 lk) }
-handleLookupNormal (VtyEvent (V.EvKey V.KDown [])) lk =
+handleLookupNormal _ (VtyEvent (V.EvKey V.KDown [])) lk =
     modify $ \st -> st { asLookup = Just (moveCursor 1 lk) }
 -- k / up arrow: previous result.
-handleLookupNormal (VtyEvent (V.EvKey (V.KChar 'k') [])) lk =
+handleLookupNormal _ (VtyEvent (V.EvKey (V.KChar 'k') [])) lk =
     modify $ \st -> st { asLookup = Just (moveCursor (-1) lk) }
-handleLookupNormal (VtyEvent (V.EvKey V.KUp [])) lk =
+handleLookupNormal _ (VtyEvent (V.EvKey V.KUp [])) lk =
     modify $ \st -> st { asLookup = Just (moveCursor (-1) lk) }
--- Space / Enter: save the highlighted word and advance.
-handleLookupNormal _ (VtyEvent (V.EvKey (V.KChar ' ') [])) lk =
-    saveCurrentWord lk
-handleLookupNormal _ (VtyEvent (V.EvKey V.KEnter [])) lk =
-    saveCurrentWord lk
+-- Space / Enter: save the highlighted word, or adopt a suggestion.
+handleLookupNormal chan (VtyEvent (V.EvKey (V.KChar ' ') [])) lk =
+    lookupConfirm chan lk
+handleLookupNormal chan (VtyEvent (V.EvKey V.KEnter [])) lk =
+    lookupConfirm chan lk
 -- i: resume editing the query.
 handleLookupNormal _ (VtyEvent (V.EvKey (V.KChar 'i') [])) lk =
     modify $ \st -> st { asLookup = Just (lk { lkMode = InsertMode }) }
@@ -466,6 +478,16 @@ handleLookupNormal _ (VtyEvent (V.EvKey (V.KChar 'i') [])) lk =
 handleLookupNormal _ (VtyEvent (V.EvKey V.KEsc [])) _ =
     modify $ \st -> st { asScreen = MainMenuScreen, asLookup = Nothing }
 handleLookupNormal _ _ _ = pure ()
+
+-- | On Space/Enter in Normal mode: if there is a result set, save the
+-- highlighted word and advance; otherwise (a failed lookup) adopt the top
+-- "did you mean" suggestion as the new query and re-submit it.
+lookupConfirm :: BChan AppEvent -> LookupState -> EventM Name AppState ()
+lookupConfirm chan lk
+    | not (null (lookupResults lk)) = saveCurrentWord lk
+    | otherwise                      = case lkSuggestions lk of
+        (w:_) -> submitLookupQuery chan (retargetLookup w lk)
+        []    -> pure ()
 
 -- | Submit the composed word to KRDICT in the background and feed the outcome
 -- back through the BChan when it lands.

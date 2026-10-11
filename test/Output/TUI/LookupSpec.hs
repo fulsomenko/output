@@ -48,7 +48,7 @@ spec = do
         it "is a no-op on empty input" $
             popJamo initialLookupState `shouldBe` initialLookupState
 
-    describe "submitLookup" $
+    describe "submitLookup" $ do
         it "enters loading and clears any stale note" $
             submitLookup
                 initialLookupState
@@ -56,6 +56,35 @@ spec = do
                     , lkNote   = Just "stale"
                     }
                 `shouldBe` initialLookupState { lkStatus = LookupLoading }
+
+        it "also clears any leftover suggestions" $
+            submitLookup
+                initialLookupState
+                    { lkSuggestions = ["나무", "물"]
+                    , lkStatus     = LookupError "boom"
+                    }
+                `shouldBe` initialLookupState { lkStatus = LookupLoading }
+
+    describe "retargetLookup" $ do
+        it "decomposes the target word back into jamo so re-typing it reproduces it" $
+            lookupQuery (retargetLookup "나무" initialLookupState) `shouldBe` "나무"
+
+        it "resets status, note, mode, cursor, saved words and suggestions" $ do
+            let s = retargetLookup "물"
+                            (initialLookupState { lkInput       = [ Consonant 'ㅁ' ]
+                                               , lkStatus      = LookupError "boom"
+                                               , lkNote        = Just "stale"
+                                               , lkMode        = NormalMode
+                                               , lkCursor      = 3
+                                               , lkSaved       = ["나무"]
+                                               , lkSuggestions = ["나무"]
+                                               })
+            lkStatus s      `shouldBe` LookupIdle
+            lkNote s        `shouldBe` Nothing
+            lkMode s        `shouldBe` InsertMode
+            lkCursor s      `shouldBe` 0
+            lkSaved s       `shouldBe` []
+            lkSuggestions s `shouldBe` []
 
     describe "applyLookupOutcome" $ do
         it "stores the fetched words and switches to Normal mode" $
@@ -72,7 +101,7 @@ spec = do
 
     it "starts idle, in Insert mode, with no input, note, cursor or saved words" $
         initialLookupState
-            `shouldBe` LookupState [] LookupIdle Nothing InsertMode 0 []
+            `shouldBe` LookupState [] LookupIdle Nothing InsertMode 0 [] []
 
     describe "lookupResults" $ do
         it "returns the word list when a result set is present" $

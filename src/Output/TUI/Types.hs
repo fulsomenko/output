@@ -35,6 +35,7 @@ module Output.TUI.Types
     , applyJamo
     , popJamo
     , submitLookup
+    , retargetLookup
     , applyLookupOutcome
     , moveCursor
     , isSavedWord
@@ -69,7 +70,7 @@ import GHC.Generics (Generic)
 import Output.Domain.Types
 import Output.Domain.Activity (ActivityEntry)
 import Output.Domain.Exercise (ExercisePrompt)
-import Output.Domain.Jamo (Jamo, composeJamoSequence)
+import Output.Domain.Jamo (Jamo, composeJamoSequence, decomposeKorean)
 import Output.Domain.TypingLevel (TypingLevel)
 import Output.Domain.TypingWord (TypingWord)
 import Output.Domain.TypingExercise (TypingExerciseType, TypingPrompt, CharStatus)
@@ -283,23 +284,25 @@ data LookupStatus
 -- cursor, Space or Enter saves the highlighted word). 'lkSaved' tracks the
 -- headwords saved this session so the UI can badge them as saved.
 data LookupState = LookupState
-    { lkInput    :: [Jamo]              -- ^ Jamo typed so far (two-beolsik order)
-    , lkStatus   :: LookupStatus
-    , lkNote     :: Maybe Text          -- ^ Feedback note (e.g. a save result)
-    , lkMode     :: InputMode           -- ^ InsertMode = typing query; NormalMode = browsing
-    , lkCursor   :: Int                 -- ^ 0-based index of the highlighted result
-    , lkSaved    :: [Text]              -- ^ Headwords saved this session (drives the badge)
+    { lkInput       :: [Jamo]           -- ^ Jamo typed so far (two-beolsik order)
+    , lkStatus      :: LookupStatus
+    , lkNote        :: Maybe Text       -- ^ Feedback note (e.g. a save result)
+    , lkMode        :: InputMode        -- ^ InsertMode = typing query; NormalMode = browsing
+    , lkCursor      :: Int              -- ^ 0-based index of the highlighted result
+    , lkSaved       :: [Text]           -- ^ Headwords saved this session (drives the badge)
+    , lkSuggestions :: [Text]           -- ^ "Did you mean" words when a lookup finds nothing
     } deriving (Show, Eq)
 
 -- | Fresh lookup state: empty input, ready to type.
 initialLookupState :: LookupState
 initialLookupState = LookupState
-    { lkInput    = []
-    , lkStatus   = LookupIdle
-    , lkNote     = Nothing
-    , lkMode     = InsertMode
-    , lkCursor   = 0
-    , lkSaved    = []
+    { lkInput       = []
+    , lkStatus      = LookupIdle
+    , lkNote        = Nothing
+    , lkMode        = InsertMode
+    , lkCursor      = 0
+    , lkSaved       = []
+    , lkSuggestions = []
     }
 
 -- | The currently typed word, composed in real time from the jamo.
@@ -326,10 +329,25 @@ popJamo s
 -- start selection over for the next result set.
 submitLookup :: LookupState -> LookupState
 submitLookup s = s
-    { lkStatus   = LookupLoading
-    , lkNote     = Nothing
-    , lkCursor   = 0
-    , lkSaved    = []
+    { lkStatus      = LookupLoading
+    , lkNote        = Nothing
+    , lkCursor      = 0
+    , lkSaved       = []
+    , lkSuggestions = []
+    }
+
+-- | Replace the input with `target` (decomposed back into jamo) and reset the
+-- per-lookup transient fields, so a caller can re-submit the lookup for that
+-- word. Used to adopt a "did you mean" suggestion.
+retargetLookup :: Text -> LookupState -> LookupState
+retargetLookup target s = s
+    { lkInput       = decomposeKorean target
+    , lkStatus      = LookupIdle
+    , lkNote        = Nothing
+    , lkMode        = InsertMode
+    , lkCursor      = 0
+    , lkSaved       = []
+    , lkSuggestions = []
     }
 
 -- | Apply a finished lookup outcome, switching to NormalMode so the user can

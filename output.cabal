@@ -38,6 +38,7 @@ library
         Output.Algorithm.ExerciseGen
         Output.Algorithm.Streak
         Output.Dict.Krdict
+        Output.Dict.Suggest
         Output.LLM.Client
         Output.LLM.Persona
         Output.LLM.Agent
@@ -102,4 +103,5 @@ test-suite output-test
         Output.Algorithm.StreakSpec
         Output.Algorithm.SRSSpec
         Output.Dict.KrdictSpec
+        Output.Dict.SuggestSpec
         Output.TUI.LookupSpec
