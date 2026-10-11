@@ -9,6 +9,7 @@ module Output.Dict.KrdictSpec (spec) where
 import Test.Hspec
 import Data.Text (Text)
 import qualified Data.Text as T
+import System.Directory (createDirectoryIfMissing)
 import System.IO (writeFile)
 
 import Output.Domain.Types
@@ -142,13 +143,14 @@ spec = do
             resolved `shouldBe` "0123456789abcdef0123456789abcdef"
 
         it "reads the key from a file when the value references one" $ do
-            -- The test-suite's deps are pinned to base-only (no directory
-            -- package), so no temp dir is available. dist-newstyle (cabal's
-            -- build dir, present once the suite has been built, and gitignored)
-            -- is a safe scratch location; the key is written, asserted, and the
-            -- scratch content is truncated (it cannot be unlinked without the
-            -- directory package).
+            -- dist-newstyle is a safe scratch location for these file-based
+            -- tests: it is gitignored and is created (if absent) rather than
+            -- assumed to exist, so the tests pass the same way under a local
+            -- cabal build and inside nix's sandboxed build directory. The key
+            -- is written, asserted, and the scratch content is truncated (the
+            -- files are left in place but emptied).
             let path = "dist-newstyle/.krdict-spec-key"
+            createDirectoryIfMissing True "dist-newstyle"
             writeFile path "abcdef0123456789abcdef0123456789\n"
             resolved <- resolveApiKey (T.pack path)
             resolved `shouldBe` "abcdef0123456789abcdef0123456789"
@@ -184,11 +186,13 @@ spec = do
 
         it "rejects a secret file that is empty" $ do
             let path = "dist-newstyle/.krdict-spec-empty"
+            createDirectoryIfMissing True "dist-newstyle"
             writeFile path ""
             configErr (T.pack path)
 
         it "resolves a 32-character hex key from a file" $ do
             let path = "dist-newstyle/.krdict-spec-key"
+            createDirectoryIfMissing True "dist-newstyle"
             writeFile path "abcdef0123456789abcdef0123456789\n"
             resolveApiKeyChecked (T.pack path)
                 `shouldReturn` (Right "abcdef0123456789abcdef0123456789")
