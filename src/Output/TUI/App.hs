@@ -35,7 +35,7 @@ theAttrMap :: AttrMap
 theAttrMap = attrMap V.defAttr
     [ (titleAttr,        fg V.cyan `V.withStyle` V.bold)
     , (menuAttr,         V.defAttr)
-    , (menuSelectedAttr, fg V.cyan `V.withStyle` V.bold)
+    , (menuSelectedAttr, V.defAttr `V.withStyle` V.bold `V.withBackColor` V.cyan)
     , (promptAttr,       fg V.yellow)
     , (inputAttr,        V.defAttr)
     , (correctAttr,      fg V.green `V.withStyle` V.bold)
