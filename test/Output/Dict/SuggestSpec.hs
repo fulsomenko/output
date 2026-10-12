@@ -2,10 +2,12 @@
 
 module Output.Dict.SuggestSpec (spec) where
 
+import Control.Monad (when)
 import Data.Text (Text)
+import System.Directory (doesFileExist)
 import Test.Hspec
 
-import Output.Dict.Suggest (levenshtein, suggestions)
+import Output.Dict.Suggest (levenshtein, suggestions, loadLocalWords)
 
 spec :: Spec
 spec = do
@@ -51,3 +53,11 @@ spec = do
 
         it "returns no suggestions for an empty word list" $
             suggestions ([] :: [Text]) "오이" `shouldBe` []
+
+    describe "real word list (data/topik-vocab)" $ do
+        it "resolves the exact 우이 -> 오이 mistype from the shipped data" $ do
+            present <- doesFileExist "data/topik-vocab/level1.json"
+            when present $ do
+                pool <- loadLocalWords
+                elem "오이" pool `shouldBe` True
+                elem "오이" (suggestions pool "우이") `shouldBe` True

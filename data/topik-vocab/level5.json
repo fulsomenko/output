@@ -1,1 +1,313 @@
-[]
+[
+  {
+    "vocabId": 400,
+    "korean": "다이어트",
+    "romanization": "daieoteu",
+    "english": [
+      "Diet"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 401,
+    "korean": "칼로리",
+    "romanization": "kalori",
+    "english": [
+      "Calories"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 402,
+    "korean": "단백질",
+    "romanization": "danbaekchil",
+    "english": [
+      "Protein"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 403,
+    "korean": "지방",
+    "romanization": "jibang",
+    "english": [
+      "Fat"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 404,
+    "korean": "포도당",
+    "romanization": "pododang",
+    "english": [
+      "Glucose"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 405,
+    "korean": "식이섬유",
+    "romanization": "shikisomeu",
+    "english": [
+      "Dietary fiber"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 406,
+    "korean": "비타민",
+    "romanization": "bitamin",
+    "english": [
+      "Vitamin"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 407,
+    "korean": "미네랄",
+    "romanization": "mineoreol",
+    "english": [
+      "Minerals"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 408,
+    "korean": "유기농",
+    "romanization": "yuginong",
+    "english": [
+      "Organic"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 409,
+    "korean": "무가당",
+    "romanization": "mugadang",
+    "english": [
+      "Sugar-free"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 410,
+    "korean": "저염",
+    "romanization": "jerom",
+    "english": [
+      "Low-salt"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 411,
+    "korean": "다당류",
+    "romanization": "dadangryu",
+    "english": [
+      "Polysaccharides",
+      "Complex carbs"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 412,
+    "korean": "건강",
+    "romanization": "geongnyang",
+    "english": [
+      "Health"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 413,
+    "korean": "면역",
+    "romanization": "munnyeok",
+    "english": [
+      "Immunity"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 414,
+    "korean": "알레르기",
+    "romanization": "alleogeugi",
+    "english": [
+      "Allergy"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 415,
+    "korean": "소화",
+    "romanization": "sohwa",
+    "english": [
+      "Digestion"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 416,
+    "korean": "위",
+    "romanization": "wi",
+    "english": [
+      "Stomach"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 417,
+    "korean": "간",
+    "romanization": "gan",
+    "english": [
+      "Liver"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 418,
+    "korean": "심장",
+    "romanization": "simjang",
+    "english": [
+      "Heart"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 419,
+    "korean": "폐",
+    "romanization": "pe",
+    "english": [
+      "Lungs"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 420,
+    "korean": "피",
+    "romanization": "pi",
+    "english": [
+      "Blood"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 421,
+    "korean": "뼈",
+    "romanization": "pyo",
+    "english": [
+      "Bone"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 422,
+    "korean": "근육",
+    "romanization": "geungnyeok",
+    "english": [
+      "Muscle"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 423,
+    "korean": "혈관",
+    "romanization": "hyeul-gwan",
+    "english": [
+      "Blood vessels"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 424,
+    "korean": "호흡",
+    "romanization": "hobub",
+    "english": [
+      "Breath",
+      "Respiration"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 425,
+    "korean": "수분",
+    "romanization": "subun",
+    "english": [
+      "Moisture",
+      "Hydration"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 426,
+    "korean": "체중",
+    "romanization": "che-jung",
+    "english": [
+      "Body weight"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 427,
+    "korean": "영양",
+    "romanization": "yeong-yang",
+    "english": [
+      "Nutrition"
+    ],
+    "topicLevel": "Five",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  }
+]

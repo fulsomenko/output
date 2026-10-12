@@ -1,1 +1,302 @@
-[]
+[
+  {
+    "vocabId": 300,
+    "korean": "요리",
+    "romanization": "yori",
+    "english": [
+      "Cooking",
+      "Cuisine"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 301,
+    "korean": "조리",
+    "romanization": "jori",
+    "english": [
+      "Preparation",
+      "To cook"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 302,
+    "korean": "볶다",
+    "romanization": "bokda",
+    "english": [
+      "To stir-fry"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 303,
+    "korean": "굽다",
+    "romanization": "gutda",
+    "english": [
+      "To grill"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 304,
+    "korean": "찌다",
+    "romanization": "jida",
+    "english": [
+      "To steam"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 305,
+    "korean": "삶다",
+    "romanization": "samda",
+    "english": [
+      "To boil"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 306,
+    "korean": "튀기다",
+    "romanization": "twikida",
+    "english": [
+      "To deep-fry"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 307,
+    "korean": "구이",
+    "romanization": "gui",
+    "english": [
+      "Grilled food"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 308,
+    "korean": "전",
+    "romanization": "jeon",
+    "english": [
+      "Korean pancake"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 309,
+    "korean": "부침개",
+    "romanization": "buchimgae",
+    "english": [
+      "Korean omelet",
+      "Fried pancake"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 310,
+    "korean": "떡",
+    "romanization": "tteok",
+    "english": [
+      "Rice cake"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 311,
+    "korean": "수제비",
+    "romanization": "sujebi",
+    "english": [
+      "Chewy dough in broth"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 312,
+    "korean": "비빔밥",
+    "romanization": "bibimbap",
+    "english": [
+      "Mixed rice bowl"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 313,
+    "korean": "김밥",
+    "romanization": "gimbap",
+    "english": [
+      "Seaweed rice roll"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 314,
+    "korean": "잡채",
+    "romanization": "japchae",
+    "english": [
+      "Stir-fried glass noodles"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 315,
+    "korean": "냉면",
+    "romanization": "nyeongmyeon",
+    "english": [
+      "Cold noodles"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 316,
+    "korean": "소갈비",
+    "romanization": "sogalbi",
+    "english": [
+      "Beef ribs"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 317,
+    "korean": "돈까스",
+    "romanization": "donggas",
+    "english": [
+      "Korean fried cutlet"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 318,
+    "korean": "계란말이",
+    "romanization": "gyeranmari",
+    "english": [
+      "Rolled omelet"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 319,
+    "korean": "김치찌개",
+    "romanization": "kimchijigae",
+    "english": [
+      "Kimchi stew"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 320,
+    "korean": "떡국",
+    "romanization": "ttukguk",
+    "english": [
+      "Rice cake soup"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 321,
+    "korean": "부대찌개",
+    "romanization": "budaejigae",
+    "english": [
+      "Army stew"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 322,
+    "korean": "파전",
+    "romanization": "pajjeon",
+    "english": [
+      "Scallion pancake"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 323,
+    "korean": "치즈",
+    "romanization": "chiju",
+    "english": [
+      "Cheese"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 324,
+    "korean": "버터",
+    "romanization": "beoteo",
+    "english": [
+      "Butter"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 325,
+    "korean": "마요네즈",
+    "romanization": "mayoneje",
+    "english": [
+      "Mayonnaise"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 326,
+    "korean": "메밀",
+    "romanization": "memil",
+    "english": [
+      "Buckwheat"
+    ],
+    "topicLevel": "Four",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  }
+]

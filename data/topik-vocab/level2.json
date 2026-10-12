@@ -1,1 +1,304 @@
-[]
+[
+  {
+    "vocabId": 100,
+    "korean": "주스",
+    "romanization": "ju-seu",
+    "english": [
+      "Juice"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 101,
+    "korean": "생수",
+    "romanization": "saengsu",
+    "english": [
+      "Bottled water"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 102,
+    "korean": "탄산음료",
+    "romanization": "tansan-eumryo",
+    "english": [
+      "Soda",
+      "Soft drink"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 103,
+    "korean": "맥주",
+    "romanization": "mak-ju",
+    "english": [
+      "Beer"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 104,
+    "korean": "소주",
+    "romanization": "so-ju",
+    "english": [
+      "Soju",
+      "Korean distilled liquor"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 105,
+    "korean": "와인",
+    "romanization": "win",
+    "english": [
+      "Wine"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 106,
+    "korean": "사이다",
+    "romanization": "saideu",
+    "english": [
+      "Cider (sweet soda)"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 107,
+    "korean": "코코아",
+    "romanization": "kokoa",
+    "english": [
+      "Cocoa",
+      "Hot chocolate"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 108,
+    "korean": "초콜릿",
+    "romanization": "chokollit",
+    "english": [
+      "Chocolate"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 109,
+    "korean": "아이스크림",
+    "romanization": "aiseukeurim",
+    "english": [
+      "Ice cream"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 110,
+    "korean": "케이크",
+    "romanization": "ke-i-keu",
+    "english": [
+      "Cake"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 111,
+    "korean": "쿠키",
+    "romanization": "ku-ki",
+    "english": [
+      "Cookie"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 112,
+    "korean": "도너츠",
+    "romanization": "donaetsu",
+    "english": [
+      "Donut"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 113,
+    "korean": "과자",
+    "romanization": "gwaja",
+    "english": [
+      "Snacks",
+      "Biscuits"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 114,
+    "korean": "간식",
+    "romanization": "gansik",
+    "english": [
+      "Snack"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 115,
+    "korean": "해물",
+    "romanization": "haemul",
+    "english": [
+      "Seafood"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 116,
+    "korean": "생선",
+    "romanization": "saengseon",
+    "english": [
+      "Fish"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 117,
+    "korean": "고기",
+    "romanization": "godi",
+    "english": [
+      "Meat"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 118,
+    "korean": "닭고기",
+    "romanization": "dakgodi",
+    "english": [
+      "Chicken meat"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 119,
+    "korean": "돼지고기",
+    "romanization": "dwaejigodi",
+    "english": [
+      "Pork"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 120,
+    "korean": "소고기",
+    "romanization": "sogodi",
+    "english": [
+      "Beef"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 121,
+    "korean": "양고기",
+    "romanization": "yanggodi",
+    "english": [
+      "Lamb"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 122,
+    "korean": "새우",
+    "romanization": "saeu",
+    "english": [
+      "Shrimp"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 123,
+    "korean": "게",
+    "romanization": "ge",
+    "english": [
+      "Crab"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 124,
+    "korean": "오징어",
+    "romanization": "ojingeo",
+    "english": [
+      "Squid"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 125,
+    "korean": "문어",
+    "romanization": "muneo",
+    "english": [
+      "Octopus"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 126,
+    "korean": "조개",
+    "romanization": "jokgae",
+    "english": [
+      "Shells",
+      "Clams"
+    ],
+    "topicLevel": "Two",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  }
+]

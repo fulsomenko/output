@@ -1,1 +1,358 @@
-[]
+[
+  {
+    "vocabId": 500,
+    "korean": "예약",
+    "romanization": "yeyak",
+    "english": [
+      "Reservation"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 501,
+    "korean": "주문",
+    "romanization": "jumun",
+    "english": [
+      "To order"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 502,
+    "korean": "매운맛",
+    "romanization": "meunmath",
+    "english": [
+      "Spicy flavor"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 503,
+    "korean": "매운",
+    "romanization": "meun",
+    "english": [
+      "Spicy"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 504,
+    "korean": "식탁",
+    "romanization": "shiktak",
+    "english": [
+      "Dining table"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 505,
+    "korean": "손님",
+    "romanization": "sonnim",
+    "english": [
+      "Customer",
+      "Guest"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 506,
+    "korean": "테이블",
+    "romanization": "teibeol",
+    "english": [
+      "Table"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 507,
+    "korean": "메뉴",
+    "romanization": "menyu",
+    "english": [
+      "Menu"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 508,
+    "korean": "세트",
+    "romanization": "seto",
+    "english": [
+      "Set meal"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 509,
+    "korean": "배달",
+    "romanization": "baedal",
+    "english": [
+      "Delivery"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 510,
+    "korean": "포장",
+    "romanization": "pojang",
+    "english": [
+      "Takeout",
+      "Takeaway"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 511,
+    "korean": "홀",
+    "romanization": "hol",
+    "english": [
+      "Dine-in"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 512,
+    "korean": "사이드",
+    "romanization": "saideu",
+    "english": [
+      "Side (dish)"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 513,
+    "korean": "토핑",
+    "romanization": "toping",
+    "english": [
+      "Topping"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 514,
+    "korean": "식기",
+    "romanization": "shikgi",
+    "english": [
+      "Tableware"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 515,
+    "korean": "젓가락",
+    "romanization": "jeolkak",
+    "english": [
+      "Chopsticks"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 516,
+    "korean": "숟가락",
+    "romanization": "sullagag",
+    "english": [
+      "Spoon"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 517,
+    "korean": "포크",
+    "romanization": "pogu",
+    "english": [
+      "Fork"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 518,
+    "korean": "나이프",
+    "romanization": "naiveu",
+    "english": [
+      "Knife"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 519,
+    "korean": "접시",
+    "romanization": "shipshi",
+    "english": [
+      "Plate"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 520,
+    "korean": "그릇",
+    "romanization": "gureut",
+    "english": [
+      "Bowl",
+      "Dish"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 521,
+    "korean": "냄비",
+    "romanization": "nambi",
+    "english": [
+      "Pot"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 522,
+    "korean": "프라이팬",
+    "romanization": "praipeon",
+    "english": [
+      "Frying pan"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 523,
+    "korean": "스푼",
+    "romanization": "seun",
+    "english": [
+      "Spoon"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 524,
+    "korean": "유리잔",
+    "romanization": "yurijan",
+    "english": [
+      "Drinking glass"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 525,
+    "korean": "컵",
+    "romanization": "geup",
+    "english": [
+      "Cup"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 526,
+    "korean": "주점",
+    "romanization": "jujeom",
+    "english": [
+      "Bar",
+      "Pub"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 527,
+    "korean": "카페",
+    "romanization": "kafe",
+    "english": [
+      "Cafe"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 528,
+    "korean": "패스트리",
+    "romanization": "paesseuteuri",
+    "english": [
+      "Pastry"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 529,
+    "korean": "브런치",
+    "romanization": "beoncheu",
+    "english": [
+      "Brunch"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 530,
+    "korean": "분식",
+    "romanization": "bunsik",
+    "english": [
+      "Korean street food"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 531,
+    "korean": "길거리음식",
+    "romanization": "gilgeoreui-eumsik",
+    "english": [
+      "Street food"
+    ],
+    "topicLevel": "Six",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  }
+]

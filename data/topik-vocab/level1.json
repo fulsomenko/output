@@ -347,5 +347,363 @@
       "There is a book.",
       "Do you have time?"
     ]
+  },
+  {
+    "vocabId": 21,
+    "korean": "김치",
+    "romanization": "kimchi",
+    "english": [
+      "Kimchi"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 22,
+    "korean": "오이",
+    "romanization": "oi",
+    "english": [
+      "Cucumber",
+      "Pickle"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 23,
+    "korean": "우유",
+    "romanization": "uyu",
+    "english": [
+      "Milk"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 24,
+    "korean": "계란",
+    "romanization": "gyeoran",
+    "english": [
+      "Egg"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 25,
+    "korean": "빵",
+    "romanization": "pyang",
+    "english": [
+      "Bread"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 26,
+    "korean": "과일",
+    "romanization": "gwaeil",
+    "english": [
+      "Fruit"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 27,
+    "korean": "채소",
+    "romanization": "chaeso",
+    "english": [
+      "Vegetable"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 28,
+    "korean": "야채",
+    "romanization": "yachae",
+    "english": [
+      "Vegetables"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 29,
+    "korean": "라면",
+    "romanization": "ramyeon",
+    "english": [
+      "Ramen",
+      "Instant noodles"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 30,
+    "korean": "컵라면",
+    "romanization": "keopramyeon",
+    "english": [
+      "Cup noodles"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 31,
+    "korean": "커피",
+    "romanization": "keopi",
+    "english": [
+      "Coffee"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 32,
+    "korean": "녹차",
+    "romanization": "nokcha",
+    "english": [
+      "Green tea"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 33,
+    "korean": "차",
+    "romanization": "cha",
+    "english": [
+      "Tea"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 34,
+    "korean": "돈",
+    "romanization": "don",
+    "english": [
+      "Money"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 35,
+    "korean": "가격",
+    "romanization": "gagyeok",
+    "english": [
+      "Price"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 36,
+    "korean": "비싸다",
+    "romanization": "bissada",
+    "english": [
+      "Expensive"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 37,
+    "korean": "맛있다",
+    "romanization": "mashitda",
+    "english": [
+      "Delicious",
+      "Tasty"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 38,
+    "korean": "맛",
+    "romanization": "mat",
+    "english": [
+      "Taste",
+      "Flavor"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 39,
+    "korean": "달다",
+    "romanization": "dalda",
+    "english": [
+      "Sweet"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 40,
+    "korean": "짜다",
+    "romanization": "jjada",
+    "english": [
+      "Salty"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 41,
+    "korean": "신다",
+    "romanization": "shinda",
+    "english": [
+      "Sour"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 42,
+    "korean": "쓰다",
+    "romanization": "sseuda",
+    "english": [
+      "Bitter"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 43,
+    "korean": "식당",
+    "romanization": "sikdang",
+    "english": [
+      "Restaurant"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 44,
+    "korean": "가게",
+    "romanization": "gagye",
+    "english": [
+      "Shop",
+      "Store"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 45,
+    "korean": "시장",
+    "romanization": "siyang",
+    "english": [
+      "Market"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 46,
+    "korean": "오늘",
+    "romanization": "oneul",
+    "english": [
+      "Today"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 47,
+    "korean": "내일",
+    "romanization": "naeil",
+    "english": [
+      "Tomorrow"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 48,
+    "korean": "어제",
+    "romanization": "eojje",
+    "english": [
+      "Yesterday"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 49,
+    "korean": "지금",
+    "romanization": "jigeum",
+    "english": [
+      "Now"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 50,
+    "korean": "아침",
+    "romanization": "achim",
+    "english": [
+      "Morning"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 51,
+    "korean": "점심",
+    "romanization": "japseum",
+    "english": [
+      "Lunch"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 52,
+    "korean": "저녁",
+    "romanization": "yeongjeom",
+    "english": [
+      "Evening",
+      "Dinner"
+    ],
+    "topicLevel": "One",
+    "exampleSentences": [],
+    "exampleTranslations": []
   }
 ]

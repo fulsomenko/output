@@ -1,1 +1,303 @@
-[]
+[
+  {
+    "vocabId": 200,
+    "korean": "양파",
+    "romanization": "yangpa",
+    "english": [
+      "Onion"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 201,
+    "korean": "파",
+    "romanization": "pa",
+    "english": [
+      "Green onion",
+      "Scallion"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 202,
+    "korean": "배추",
+    "romanization": "baechu",
+    "english": [
+      "Napa cabbage"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 203,
+    "korean": "시금치",
+    "romanization": "simgich",
+    "english": [
+      "Spinach"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 204,
+    "korean": "호박",
+    "romanization": "hubak",
+    "english": [
+      "Pumpkin",
+      "Zucchini"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 205,
+    "korean": "감자",
+    "romanization": "gamja",
+    "english": [
+      "Potato"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 206,
+    "korean": "당근",
+    "romanization": "danggeun",
+    "english": [
+      "Carrot"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 207,
+    "korean": "토마토",
+    "romanization": "tomato",
+    "english": [
+      "Tomato"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 208,
+    "korean": "고추",
+    "romanization": "gochu",
+    "english": [
+      "Chili pepper"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 209,
+    "korean": "오렌지",
+    "romanization": "oreonji",
+    "english": [
+      "Orange"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 210,
+    "korean": "사과",
+    "romanization": "saga",
+    "english": [
+      "Apple"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 211,
+    "korean": "바나나",
+    "romanization": "banana",
+    "english": [
+      "Banana"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 212,
+    "korean": "수박",
+    "romanization": "subak",
+    "english": [
+      "Watermelon"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 213,
+    "korean": "포도",
+    "romanization": "popo",
+    "english": [
+      "Grapes"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 214,
+    "korean": "복숭아",
+    "romanization": "bokstangha",
+    "english": [
+      "Peach"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 215,
+    "korean": "망고",
+    "romanization": "mango",
+    "english": [
+      "Mango"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 216,
+    "korean": "대추",
+    "romanization": "dachu",
+    "english": [
+      "Jujube",
+      "Date"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 217,
+    "korean": "배",
+    "romanization": "baeg",
+    "english": [
+      "Pear"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 218,
+    "korean": "감",
+    "romanization": "gam",
+    "english": [
+      "Persimmon"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 219,
+    "korean": "꿀",
+    "romanization": "mul",
+    "english": [
+      "Honey"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 220,
+    "korean": "소금",
+    "romanization": "sogeum",
+    "english": [
+      "Salt"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 221,
+    "korean": "설탕",
+    "romanization": "seoltang",
+    "english": [
+      "Sugar"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 222,
+    "korean": "간장",
+    "romanization": "ganjang",
+    "english": [
+      "Soy sauce"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 223,
+    "korean": "기름",
+    "romanization": "gireum",
+    "english": [
+      "Oil",
+      "Fat"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 224,
+    "korean": "후추",
+    "romanization": "huchu",
+    "english": [
+      "Black pepper"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 225,
+    "korean": "식초",
+    "romanization": "sikcho",
+    "english": [
+      "Vinegar"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  },
+  {
+    "vocabId": 226,
+    "korean": "생강",
+    "romanization": "saenggang",
+    "english": [
+      "Ginger"
+    ],
+    "topicLevel": "Three",
+    "exampleSentences": [],
+    "exampleTranslations": []
+  }
+]
