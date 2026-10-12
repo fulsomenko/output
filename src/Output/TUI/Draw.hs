@@ -19,7 +19,7 @@ import Data.Time.Format (formatTime, defaultTimeLocale)
 import Output.TUI.Types
 import Output.Dict.Krdict (KrdictSense(..), KrdictTranslation(..), KrdictWord(..), englishTranslation)
 import Output.Domain.Exercise (ExercisePrompt(..))
-import Output.Domain.Types (TypingProgress, VocabularyCard(..), VocabularyState(..), MasteryLevel(..), ExerciseType(..))
+import Output.Domain.Types (TypingProgress, VocabularyCard(..), VocabularyState(..), MasteryLevel(..), ExerciseType(..), TOPIK_Level(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
 import Output.Domain.Settings (AppSettings(..), showLanguage)
 import Output.LLM.Persona (personaName)
@@ -57,6 +57,7 @@ drawUI s = [ui]
         LookupScreen   -> case asLookup s of
             Just lk -> drawLookup s lk
             Nothing -> drawMainMenu s
+        VocabularyScreen -> drawVocabularyScreen s
 
 -- | Shared status bar shown at the bottom of every screen
 statusBar :: AppState -> Text -> Widget Name
@@ -108,6 +109,7 @@ drawMenuItems s = vBox $ zipWith (drawMenuItem (asMenuIndex s)) [0..] menuOption
         , ("Reading Drill",    "Read Korean and self-grade")
         , ("Writing Drill",    "Translate English to Korean")
         , ("Dictionary Lookup","Look up any word in KRDICT (two-beolsik input)")
+        , ("My Vocabulary",    "View all words you have saved")
         , ("View Progress",    "See your learning statistics")
         , ("Activity Stats",   "View history of all practice sessions")
         , ("Settings",         "Language and Ollama configuration")
@@ -747,3 +749,59 @@ drawPersonaScreen s =
             , valueWidget
             ]
     padRight' n t = t <> T.replicate (max 0 (n - T.length t)) " "
+
+-- | A single row on the vocabulary review screen.
+drawVocabularyRow :: Bool -> VocabularyCard -> Widget Name
+drawVocabularyRow selected card =
+    let korean'  = korean card
+        roman'   = romanization card
+        english' = T.intercalate ", " (english card)
+        level'   = showTopicLevel (topicLevel card)
+    in withAttr (if selected then menuSelectedAttr else menuAttr) $
+        hBox
+            [ padRight Max $ txt $ if selected then ">" else " "
+            , padRight Max $ txt korean'
+            , padRight Max $ withAttr statsAttr $ txt roman'
+            , padRight Max $ txt english'
+            , withAttr hintAttr $ txt level'
+            ]
+
+-- | Render a TOPIK level as a compact label.
+showTopicLevel :: TOPIK_Level -> Text
+showTopicLevel lvl = "TOPIK " <> T.pack (show (levelToInt lvl))
+  where
+    levelToInt One   = 1
+    levelToInt Two   = 2
+    levelToInt Three = 3
+    levelToInt Four  = 4
+    levelToInt Five  = 5
+    levelToInt Six   = 6
+
+-- | Vocabulary review screen: lists every word saved to the bank.
+drawVocabularyScreen :: AppState -> Widget Name
+drawVocabularyScreen s =
+    withBorderStyle unicodeBold $
+    borderWithLabel (withAttr titleAttr $ txt " My Vocabulary ") $
+    vBox
+        [ padAll 1 $ vBox
+            [ hBox
+                [ withAttr statsAttr $ txt countLabel
+                , padRight Max emptyWidget
+                , withAttr hintAttr $ txt "korean · romanization · translations · level"
+                ]
+            , hBorder
+            , padTop (Pad 1) $
+                if null cards
+                then withAttr hintAttr $
+                        txt "No words saved yet. Save words from the dictionary lookup to build your bank."
+                else viewport VocabularyViewport Vertical $
+                        vBox [ drawVocabularyRow (i == asVocabCursor s) c
+                             | (i, c) <- zip [0 ..] cards
+                             ]
+            , fill ' '
+            , statusBar s "[j/↓] Next   [k/↑] Previous   [Esc] Back to menu"
+            ]
+        ]
+  where
+    cards      = asVocabCards s
+    countLabel = "  " <> T.pack (show (length cards)) <> " saved"

@@ -83,6 +83,7 @@ handleEvent chan ev = do
         SettingsScreen          -> handleSettingsEvent ev
         PersonaScreen           -> handlePersonaEvent ev
         LookupScreen            -> handleLookupEvent chan ev
+        VocabularyScreen        -> handleVocabularyEvent ev
 
 -- | Append an incoming session note to the student profile (disk + in-memory).
 -- The note log is append-only so no past observations are ever lost.
@@ -130,9 +131,9 @@ handleMenuEvent _    (VtyEvent (V.EvKey V.KUp [])) =
 handleMenuEvent _    (VtyEvent (V.EvKey (V.KChar 'k') [])) =
     modify $ \s -> s { asMenuIndex = max 0 (asMenuIndex s - 1) }
 handleMenuEvent _    (VtyEvent (V.EvKey V.KDown [])) =
-    modify $ \s -> s { asMenuIndex = min 15 (asMenuIndex s + 1) }
+    modify $ \s -> s { asMenuIndex = min 16 (asMenuIndex s + 1) }
 handleMenuEvent _    (VtyEvent (V.EvKey (V.KChar 'j') [])) =
-    modify $ \s -> s { asMenuIndex = min 15 (asMenuIndex s + 1) }
+    modify $ \s -> s { asMenuIndex = min 16 (asMenuIndex s + 1) }
 handleMenuEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
     s <- get
     case asMenuIndex s of
@@ -148,16 +149,17 @@ handleMenuEvent chan (VtyEvent (V.EvKey V.KEnter [])) = do
         7 -> startDrill TypingMode
         8 -> startDrill ReadingMode
         9 -> startDrill WritingMode
-        -- Lookup / progress / stats (10-12)
+        -- Lookup / vocabulary / progress / stats (10-13)
         10 -> startLookup
-        11 -> modify $ \st -> st { asScreen = ProgressScreen }
-        12 -> do
+        11 -> modify $ \st -> st { asScreen = VocabularyScreen }
+        12 -> modify $ \st -> st { asScreen = ProgressScreen }
+        13 -> do
             freshActivities <- liftIO $ runJsonRepository getAllActivities
             modify $ \st -> st { asScreen = StatsScreen, asActivities = freshActivities, asStatsSelectedDay = 0 }
-        -- Settings / help / quit (13-15)
-        13 -> modify $ \st -> st { asScreen = SettingsScreen }
-        14 -> modify $ \st -> st { asScreen = HelpScreen }
-        15 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
+        -- Settings / help / quit (14-16)
+        14 -> modify $ \st -> st { asScreen = SettingsScreen }
+        15 -> modify $ \st -> st { asScreen = HelpScreen }
+        16 -> modify $ \st -> st { asScreen = QuitConfirmScreen }
         _ -> pure ()
 handleMenuEvent _    (VtyEvent (V.EvKey (V.KChar '?') [])) =
     modify $ \s -> s { asScreen = HelpScreen }
@@ -954,6 +956,27 @@ handleDayDetailEvent (VtyEvent (V.EvKey V.KEsc [])) =
 handleDayDetailEvent (VtyEvent (V.EvKey V.KEnter [])) =
     modify $ \s -> s { asScreen = StatsScreen }
 handleDayDetailEvent _ = pure ()
+
+-- | Handle the vocabulary review screen: j/k and the arrows move through the
+-- saved words, Esc returns to the menu.
+handleVocabularyEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+handleVocabularyEvent (VtyEvent (V.EvKey V.KEsc [])) =
+    modify $ \s -> s { asScreen = MainMenuScreen }
+handleVocabularyEvent (VtyEvent (V.EvKey (V.KChar 'q') [])) =
+    modify $ \s -> s { asScreen = MainMenuScreen }
+handleVocabularyEvent (VtyEvent (V.EvKey V.KUp [])) =
+    modify $ \s -> s { asVocabCursor = max 0 (asVocabCursor s - 1) }
+handleVocabularyEvent (VtyEvent (V.EvKey (V.KChar 'k') [])) =
+    modify $ \s -> s { asVocabCursor = max 0 (asVocabCursor s - 1) }
+handleVocabularyEvent (VtyEvent (V.EvKey V.KDown [])) = do
+    s <- get
+    let maxIdx = max 0 (length (asVocabCards s) - 1)
+    modify $ \st -> st { asVocabCursor = min maxIdx (asVocabCursor st + 1) }
+handleVocabularyEvent (VtyEvent (V.EvKey (V.KChar 'j') [])) = do
+    s <- get
+    let maxIdx = max 0 (length (asVocabCards s) - 1)
+    modify $ \st -> st { asVocabCursor = min maxIdx (asVocabCursor st + 1) }
+handleVocabularyEvent _ = pure ()
 
 -- | Handle help screen events
 handleHelpEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()

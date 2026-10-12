@@ -92,6 +92,7 @@ data Name
     | LevelSelector
     | ChatHistoryViewport
     | LookupViewport
+    | VocabularyViewport
     deriving (Show, Eq, Ord)
 
 -- | Application screens
@@ -109,6 +110,7 @@ data Screen
     | SettingsScreen
     | PersonaScreen
     | LookupScreen
+    | VocabularyScreen
     deriving (Show, Eq)
 
 -- | Mode of the drill exercise
@@ -424,6 +426,7 @@ data AppState = AppState
     , asDailyStreak :: Int                  -- Current streak in days
     , asActivities :: [ActivityEntry]       -- Full activity log
     , asStatsSelectedDay :: Int             -- Selected day index in stats screen
+    , asVocabCursor :: Int                  -- Selected index in the vocabulary screen
     -- LLM / AI lessons
     , asLLMChat       :: Maybe LLMChatState             -- Active AI lesson chat
     , asSettings      :: AppSettings                    -- Language, level, Ollama config
@@ -451,6 +454,7 @@ initialAppState = AppState
     , asDailyStreak = 0
     , asActivities = []
     , asStatsSelectedDay = 0
+    , asVocabCursor = 0
     -- LLM defaults
     , asLLMChat        = Nothing
     , asSettings       = defaultSettings
