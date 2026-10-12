@@ -667,9 +667,8 @@ drawLookupStatus savedWords lk = case lkStatus lk of
 -- entry and @isSaved@ marks one already saved to the vocabulary pool.
 drawLookupWord :: Bool -> Bool -> KrdictWord -> Widget Name
 drawLookupWord isCursor isSaved w =
-    applyIf isCursor (withAttr menuSelectedAttr) $
     padBottom (Pad 2) $ vBox
-        [ hBox $ [ withAttr promptAttr $ txt (kwWord w)
+        [ hBox $ [ withAttr (if isCursor then menuSelectedAttr else promptAttr) $ txt (kwWord w)
                  , txt "  "
                  , withAttr (if isSaved then correctAttr else hintAttr) $ txt mark
                  ]
@@ -757,14 +756,13 @@ drawVocabularyRow selected card =
         roman'   = romanization card
         english' = T.intercalate ", " (english card)
         level'   = showTopicLevel (topicLevel card)
-    in withAttr (if selected then menuSelectedAttr else menuAttr) $
-        hBox
-            [ padRight Max $ txt $ if selected then ">" else " "
-            , padRight Max $ txt korean'
-            , padRight Max $ withAttr statsAttr $ txt roman'
-            , padRight Max $ txt english'
-            , withAttr hintAttr $ txt level'
-            ]
+    in hBox
+        [ padRight Max $ txt $ if selected then ">" else " "
+        , padRight Max $ withAttr (if selected then menuSelectedAttr else menuAttr) $ txt korean'
+        , padRight Max $ withAttr statsAttr $ txt roman'
+        , padRight Max $ txt english'
+        , withAttr hintAttr $ txt level'
+        ]
 
 -- | Render a TOPIK level as a compact label.
 showTopicLevel :: TOPIK_Level -> Text
