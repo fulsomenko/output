@@ -424,6 +424,8 @@ handleLookupEvent _ (AppEvent (KrdictLookupDone outcome)) = do
                     | otherwise            -> pure []
                 Right _                    -> pure []
             modify $ \st -> st { asLookup = Just (lk' { lkSuggestions = sugg }) }
+            -- New results always start at the top of the viewport.
+            vScrollToBeginning (viewportScroll LookupViewport)
 -- Key events: route by input mode.
 handleLookupEvent chan ev = do
     s <- get
@@ -459,14 +461,18 @@ handleLookupInsert _ _ _ = pure ()
 -- "did you mean" suggestion when the lookup found nothing.
 handleLookupNormal :: BChan AppEvent -> BrickEvent Name AppEvent -> LookupState -> EventM Name AppState ()
 -- j / down arrow: next result.
-handleLookupNormal _ (VtyEvent (V.EvKey (V.KChar 'j') [])) lk =
+handleLookupNormal _ (VtyEvent (V.EvKey (V.KChar 'j') [])) lk = do
+    vScrollBy (viewportScroll LookupViewport) 8
     modify $ \st -> st { asLookup = Just (moveCursor 1 lk) }
-handleLookupNormal _ (VtyEvent (V.EvKey V.KDown [])) lk =
+handleLookupNormal _ (VtyEvent (V.EvKey V.KDown [])) lk = do
+    vScrollBy (viewportScroll LookupViewport) 8
     modify $ \st -> st { asLookup = Just (moveCursor 1 lk) }
 -- k / up arrow: previous result.
-handleLookupNormal _ (VtyEvent (V.EvKey (V.KChar 'k') [])) lk =
+handleLookupNormal _ (VtyEvent (V.EvKey (V.KChar 'k') [])) lk = do
+    vScrollBy (viewportScroll LookupViewport) (-8)
     modify $ \st -> st { asLookup = Just (moveCursor (-1) lk) }
-handleLookupNormal _ (VtyEvent (V.EvKey V.KUp [])) lk =
+handleLookupNormal _ (VtyEvent (V.EvKey V.KUp [])) lk = do
+    vScrollBy (viewportScroll LookupViewport) (-8)
     modify $ \st -> st { asLookup = Just (moveCursor (-1) lk) }
 -- Space / Enter: save the highlighted word, or adopt a suggestion.
 handleLookupNormal chan (VtyEvent (V.EvKey (V.KChar ' ') [])) lk =
@@ -519,6 +525,8 @@ saveCurrentWord lk = do
                            then Just $ "Already in your pool: " <> kwWord w
                            else Just $ "Saved " <> kwWord w <> " to your practice pool."
             modify $ \st -> st { asLookup = Just (lk' { lkNote = note }) }
+            -- The save advanced the highlight to the next entry; follow it.
+            vScrollBy (viewportScroll LookupViewport) 8
 
 -- ---------------------------------------------------------------------------
 -- Review screen
