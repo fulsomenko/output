@@ -605,12 +605,13 @@ drawLookup s lk =
                     , padRight Max emptyWidget
                     , withAttr hintAttr $ txt "(two-beolsik)"
                     ]
-                , padTop (Pad 1) $ drawLookupStatus lk
+                , padTop (Pad 1) $ drawLookupStatus (vocabHeadwords s) lk
                 ]
         , fill ' '
         , statusBar s hint
         ]
   where
+    vocabHeadwords s = map vocabCardHeadWord (asVocabCards s)
     cursor = if lkStatus lk == LookupLoading then "" else "│"
     hint
         | lkMode lk == NormalMode =
@@ -619,8 +620,11 @@ drawLookup s lk =
             "[type] two-beolsik  [⌫] delete  [Enter] look up  [Esc] back"
 
 -- | Draw the idle/loading/error/results status area of the lookup screen.
-drawLookupStatus :: LookupState -> Widget Name
-drawLookupStatus lk = case lkStatus lk of
+--
+-- 'savedWords' is the headword list of the user's saved vocabulary bank; a
+-- word already in it is marked with a small "saved" indicator.
+drawLookupStatus :: [Text] -> LookupState -> Widget Name
+drawLookupStatus savedWords lk = case lkStatus lk of
     LookupIdle    -> withAttr hintAttr $
         txt "Type a Korean word (two-beolsik) and press Enter to look it up."
     LookupLoading -> withAttr hintAttr $ txt "⏳ Looking up in KRDICT..."
@@ -628,29 +632,37 @@ drawLookupStatus lk = case lkStatus lk of
         [] -> withAttr incorrectAttr $ txtWrap $ "Error: " <> e
         wds -> vBox
             [ withAttr incorrectAttr $ txtWrap $ "Error: " <> e
-            , padTop (Pad 1) $ withAttr hintAttr $
-                txt $ "Did you mean  " <> T.intercalate "  ·  " wds
-                    <> "      [Enter] look up first   [i] type it yourself"
+            , padTop (Pad 1) $ hBox
+                [ withAttr hintAttr $ txt "Did you mean  "
+                , hBox (intersperse (withAttr hintAttr $ txt "  ·  ") (map suggestionWidget wds))
+                , withAttr hintAttr $ txt "      [Enter] look up first   [i] type it yourself"
+                ]
             ]
     LookupResults wds ->
         vBox
             [ if null wds
                 then withAttr hintAttr $ txt "No results."
-                else vBox $ [ drawLookupWord (i == lkCursor lk) (isSavedWord lk w) w
+                else vBox $ [ drawLookupWord (i == lkCursor lk) (isSaved (kwWord w)) w
                             | (i, w) <- zip [0 ..] wds ]
             , if null wds
                 then emptyWidget
                 else padTop (Pad 1) $ withAttr statsAttr $ txt $
-                    "Saved " <> T.pack (show (length (lkSaved lk)))
+                    "Saved " <> T.pack (show (length (filter (isSaved . kwWord) wds)))
                     <> " of " <> T.pack (show (length wds))
             , padTop (Pad 1) $ case lkNote lk of
                 Just n  -> withAttr hintAttr $ txt n
                 Nothing -> emptyWidget
             ]
+  where
+    isSaved w = w `elem` savedWords
+    -- One "did you mean" suggestion: the headword in green when it is already in
+    -- the bank, otherwise the neutral hint colour.
+    suggestionWidget w =
+        withAttr (if isSaved w then correctAttr else hintAttr) $ txt w
 
--- | Draw one KRDICT word entry: highlighted headword, save indicator, part of
--- speech, and senses. @isCursor@ marks the highlighted (j/k-selected) entry and
--- @isSaved@ marks one already saved this session.
+-- | Draw one KRDICT word entry: highlighted headword, a small saved indicator,
+-- part of speech, and senses. @isCursor@ marks the highlighted (j/k-selected)
+-- entry and @isSaved@ marks one already saved to the vocabulary pool.
 drawLookupWord :: Bool -> Bool -> KrdictWord -> Widget Name
 drawLookupWord isCursor isSaved w =
     applyIf isCursor (withAttr menuSelectedAttr) $
@@ -664,7 +676,7 @@ drawLookupWord isCursor isSaved w =
         ]
   where
     metaBits = [ t | t <- [kwPos w, kwWordGrade w], not (T.null t) ]
-    mark = if isSaved then "● saved" else "   "
+    mark = if isSaved then "●" else " "
 
 -- | Draw one sense: ordered definition plus (if present) the English translation.
 drawLookupSense :: KrdictSense -> Widget Name
