@@ -19,7 +19,7 @@ import Data.Time.Format (formatTime, defaultTimeLocale)
 import Output.TUI.Types
 import Output.Dict.Krdict (KrdictSense(..), KrdictTranslation(..), KrdictWord(..), englishTranslation)
 import Output.Domain.Exercise (ExercisePrompt(..))
-import Output.Domain.Types (TypingProgress, VocabularyState(..), MasteryLevel(..), ExerciseType(..))
+import Output.Domain.Types (TypingProgress, VocabularyCard(..), VocabularyState(..), MasteryLevel(..), ExerciseType(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
 import Output.Domain.Settings (AppSettings(..), showLanguage)
 import Output.LLM.Persona (personaName)
@@ -611,7 +611,7 @@ drawLookup s lk =
         , statusBar s hint
         ]
   where
-    vocabHeadwords s = map vocabCardHeadWord (asVocabCards s)
+    vocabHeadwords s = map korean (asVocabCards s)
     cursor = if lkStatus lk == LookupLoading then "" else "│"
     hint
         | lkMode lk == NormalMode =
