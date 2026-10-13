@@ -27,6 +27,7 @@ import Output.Domain.Types
     , VocabularyId
     , VocabularyCard(..)
     , VocabularyState(..)
+    , WordDefinition(..)
     , MasteryLevel(..)
     , newVocabularyState
     , TOPIK_Level(..)
@@ -47,7 +48,7 @@ import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..
 import Output.Domain.Settings (AppSettings(..), Language(..))
 import Output.Repository.Json
     ( runJsonRepository, saveSettings, saveLearnedWord
-    , appendSessionNote
+    , appendSessionNote, saveWordDefinition
     )
 import Output.Repository.Class (markLevelCompleted, saveVocabState, logActivity, getAllActivities)
 import Output.Algorithm.SRS (Quality(..), SRSAlgorithm(..), ratingToQuality)
@@ -83,7 +84,8 @@ handleEvent chan ev = do
         SettingsScreen          -> handleSettingsEvent ev
         PersonaScreen           -> handlePersonaEvent ev
         LookupScreen            -> handleLookupEvent chan ev
-        VocabularyScreen        -> handleVocabularyEvent ev
+        VocabularyScreen        -> handleVocabularyEvent chan ev
+        VocabWordScreen         -> handleWordDefEvent ev
 
 -- | Append an incoming session note to the student profile (disk + in-memory).
 -- The note log is append-only so no past observations are ever lost.
@@ -966,25 +968,103 @@ handleDayDetailEvent (VtyEvent (V.EvKey V.KEnter [])) =
 handleDayDetailEvent _ = pure ()
 
 -- | Handle the vocabulary review screen: j/k and the arrows move through the
--- saved words, Esc returns to the menu.
-handleVocabularyEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
-handleVocabularyEvent (VtyEvent (V.EvKey V.KEsc [])) =
+-- saved words, Enter opens a word's definitions, Esc returns to the menu.
+handleVocabularyEvent :: BChan AppEvent -> BrickEvent Name AppEvent -> EventM Name AppState ()
+handleVocabularyEvent chan (VtyEvent (V.EvKey V.KEnter [])) = openWordFromVocab chan
+handleVocabularyEvent _ (VtyEvent (V.EvKey V.KEsc [])) =
     modify $ \s -> s { asScreen = MainMenuScreen }
-handleVocabularyEvent (VtyEvent (V.EvKey (V.KChar 'q') [])) =
+handleVocabularyEvent _ (VtyEvent (V.EvKey (V.KChar 'q') [])) =
     modify $ \s -> s { asScreen = MainMenuScreen }
-handleVocabularyEvent (VtyEvent (V.EvKey V.KUp [])) =
+handleVocabularyEvent _ (VtyEvent (V.EvKey V.KUp [])) =
     modify $ \s -> s { asVocabCursor = max 0 (asVocabCursor s - 1) }
-handleVocabularyEvent (VtyEvent (V.EvKey (V.KChar 'k') [])) =
+handleVocabularyEvent _ (VtyEvent (V.EvKey (V.KChar 'k') [])) =
     modify $ \s -> s { asVocabCursor = max 0 (asVocabCursor s - 1) }
-handleVocabularyEvent (VtyEvent (V.EvKey V.KDown [])) = do
+handleVocabularyEvent _ (VtyEvent (V.EvKey V.KDown [])) = do
     s <- get
     let maxIdx = max 0 (length (asVocabCards s) - 1)
     modify $ \st -> st { asVocabCursor = min maxIdx (asVocabCursor st + 1) }
-handleVocabularyEvent (VtyEvent (V.EvKey (V.KChar 'j') [])) = do
+handleVocabularyEvent _ (VtyEvent (V.EvKey (V.KChar 'j') [])) = do
     s <- get
     let maxIdx = max 0 (length (asVocabCards s) - 1)
     modify $ \st -> st { asVocabCursor = min maxIdx (asVocabCursor st + 1) }
-handleVocabularyEvent _ = pure ()
+handleVocabularyEvent _ _ = pure ()
+
+-- | Enter on a vocabulary word: open its definition view and fetch it from
+-- KRDICT (async, result arrives as a KrdictLookupDone channel event).
+openWordFromVocab :: BChan AppEvent -> EventM Name AppState ()
+openWordFromVocab chan = do
+    s <- get
+    case asVocabCards s of
+        []    -> pure ()
+        cards -> submitWordLookup chan (cards !! idx)
+            where idx = max 0 (min (length cards - 1) (asVocabCursor s))
+
+-- | Switch to the word-definition view and submit the KRDICT fetch.
+submitWordLookup :: BChan AppEvent -> VocabularyCard -> EventM Name AppState ()
+submitWordLookup chan card = do
+    let word = korean card
+    s <- get
+    let wd = initialWordDefState word (Map.lookup word (asWordDefs s))
+    modify $ \st -> st { asScreen = VocabWordScreen, asVocabWord = Just wd }
+    liftIO $ void $ forkIO $ do
+        mKey <- lookupEnv "KRDICT_API_KEY"
+        result <- case mKey of
+            Nothing -> return
+                (Left (KrdictApiError (T.pack "KRDICT_API_KEY is not set. Put your key in .envrc.local and run: direnv allow")))
+            Just key -> krdictLookup (T.pack key) word
+        writeBChan chan (KrdictLookupDone (case result of
+            Left  e -> Left (krdictErrorText e)
+            Right w -> Right w))
+
+-- | Handle the word-definition view: the async KRDICT result arrives on the
+-- shared channel, after which j/k move the definition highlight, Enter or
+-- Space saves the highlighted one for this word, and Esc returns to the list.
+handleWordDefEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()
+-- Async result: fold it into the view state.
+handleWordDefEvent (AppEvent (KrdictLookupDone outcome)) = do
+    s <- get
+    case asVocabWord s of
+        Nothing -> pure ()
+        Just wd -> modify $ \st -> st
+                     { asVocabWord = Just (applyWordDefOutcome outcome wd) }
+handleWordDefEvent (VtyEvent (V.EvKey (V.KChar 'j') [])) = bumpDefCursor 1
+handleWordDefEvent (VtyEvent (V.EvKey V.KDown  []))      = bumpDefCursor 1
+handleWordDefEvent (VtyEvent (V.EvKey (V.KChar 'k') [])) = bumpDefCursor (-1)
+handleWordDefEvent (VtyEvent (V.EvKey V.KUp   []))       = bumpDefCursor (-1)
+handleWordDefEvent (VtyEvent (V.EvKey (V.KChar ' ') [])) = saveSelectedDefinition
+handleWordDefEvent (VtyEvent (V.EvKey V.KEnter  []))     = saveSelectedDefinition
+handleWordDefEvent (VtyEvent (V.EvKey V.KEsc  [])) =
+    modify $ \st -> st { asScreen = VocabularyScreen, asVocabWord = Nothing }
+handleWordDefEvent _ = pure ()
+
+-- | Move the definition highlight by one (clamped).
+bumpDefCursor :: Int -> EventM Name AppState ()
+bumpDefCursor delta = do
+    s <- get
+    case asVocabWord s of
+        Nothing -> pure ()
+        Just wd -> modify $ \st -> st
+                     { asVocabWord = Just (moveDefCursor delta wd) }
+
+-- | Save the highlighted definition as the saved one for this word: persist
+-- to disk and update the in-memory map, with a confirmation note.
+saveSelectedDefinition :: EventM Name AppState ()
+saveSelectedDefinition = do
+    s <- get
+    case asVocabWord s of
+        Nothing -> pure ()
+        Just wd ->
+            let (wd', mPref) = saveDefHighlighted wd
+                word         = wdsWord wd
+            in case mPref of
+                Nothing -> modify $ \st -> st { asVocabWord = Just wd' }
+                Just pref -> do
+                    liftIO $ saveWordDefinition word pref
+                    let note = "Saved definition #" <> T.pack (show (wdSenseOrder pref))
+                    modify $ \st -> st
+                        { asWordDefs  = Map.insert word pref (asWordDefs st)
+                        , asVocabWord = Just wd' { wdsNote = Just note }
+                        }
 
 -- | Handle help screen events
 handleHelpEvent :: BrickEvent Name AppEvent -> EventM Name AppState ()

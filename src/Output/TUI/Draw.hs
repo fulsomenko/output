@@ -17,9 +17,9 @@ import Data.Time.Calendar (Day, diffDays)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 
 import Output.TUI.Types
-import Output.Dict.Krdict (KrdictSense(..), KrdictTranslation(..), KrdictWord(..), englishTranslation)
+import Output.Dict.Krdict (KrdictSense(..), KrdictTranslation(..), KrdictWord(..), englishTranslation, displayWordEntry, orderedSenses)
 import Output.Domain.Exercise (ExercisePrompt(..))
-import Output.Domain.Types (TypingProgress, VocabularyCard(..), VocabularyState(..), MasteryLevel(..), ExerciseType(..), TOPIK_Level(..))
+import Output.Domain.Types (TypingProgress, VocabularyCard(..), VocabularyState(..), WordDefinition(..), MasteryLevel(..), ExerciseType(..), TOPIK_Level(..))
 import Output.Domain.Activity (ActivityEntry(..), Performance(..), Percentage(..))
 import Output.Domain.Settings (AppSettings(..), showLanguage)
 import Output.LLM.Persona (personaName)
@@ -58,6 +58,9 @@ drawUI s = [ui]
             Just lk -> drawLookup s lk
             Nothing -> drawMainMenu s
         VocabularyScreen -> drawVocabularyScreen s
+        VocabWordScreen  -> case asVocabWord s of
+            Just wd -> drawVocabWordScreen s wd
+            Nothing -> drawVocabularyScreen s
 
 -- | Shared status bar shown at the bottom of every screen
 statusBar :: AppState -> Text -> Widget Name
@@ -797,9 +800,73 @@ drawVocabularyScreen s =
                              | (i, c) <- zip [0 ..] cards
                              ]
             , fill ' '
-            , statusBar s "[j/↓] Next   [k/↑] Previous   [Esc] Back to menu"
+            , statusBar s "[j/↓] Next   [k/↑] Previous   [Enter] Definition   [Esc] Back"
             ]
         ]
   where
     cards      = asVocabCards s
     countLabel = "  " <> T.pack (show (length cards)) <> " saved"
+
+-- ---------------------------------------------------------------------------
+-- Word definition view (entered from My Vocabulary)
+-- ---------------------------------------------------------------------------
+
+-- | Draw the word-definition screen: the selected vocabulary word's KRDICT
+-- definitions, with the saved one moved to the top and highlighted.
+drawVocabWordScreen :: AppState -> WordDefState -> Widget Name
+drawVocabWordScreen s wd =
+    withBorderStyle unicodeBold $
+    vBox
+        [ borderWithLabel (withAttr titleAttr $ txt $ " " <> wdsWord wd <> " · Definition ") $
+            viewport VocabWordViewport Vertical $
+            padAll 1 $ drawWordDefBody wd
+        , fill ' '
+        , statusBar s "[j/k] move   [Enter/Space] save definition   [Esc] back to list"
+        ]
+
+-- | The body of the word-definition view: loading / error / results.
+drawWordDefBody :: WordDefState -> Widget Name
+drawWordDefBody wd = case wdsStatus wd of
+    WDLoading   -> withAttr hintAttr $ txt "⏳ Looking up in KRDICT..."
+    WDFailed e  -> withAttr incorrectAttr $ txtWrap $ "Error: " <> e
+    WDResults wds ->
+        case displayWordEntry (wdsWord wd) (wdsSaved wd) wds of
+            Nothing -> withAttr hintAttr $ txt "No results."
+            Just entry ->
+                let senses   = orderedSenses entry (wdsSaved wd)
+                    metaBits = [ t | t <- [kwPos entry, kwWordGrade entry], not (T.null t) ]
+                in vBox
+                    [ hBox $ [ withAttr promptAttr $ txt (kwWord entry), txt "  " ]
+                        ++ concatMap (\t -> [txt "  ·  ", withAttr hintAttr $ txt t]) metaBits
+                    , padTop (Pad 1) $
+                        if null senses
+                        then withAttr hintAttr $ txt "This entry has no definitions."
+                        else vBox [ drawWordDefSense (i == wdsCursor wd) (isSavedSense entry wd s') s'
+                                  | (i, s') <- zip [0 ..] senses
+                                  ]
+                    , padTop (Pad 1) $ case wdsNote wd of
+                        Just n  -> withAttr hintAttr $ txt n
+                        Nothing -> emptyWidget
+                    ]
+
+-- | Whether a sense is this entry's saved definition (drives the ★ mark).
+isSavedSense :: KrdictWord -> WordDefState -> KrdictSense -> Bool
+isSavedSense entry wd sens =
+    case wdsSaved wd of
+        Just d -> wdTargetCode d == kwTargetCode entry && wdSenseOrder d == ksOrder sens
+        Nothing -> False
+
+-- | Draw one definition line in the word-definition view. The saved one
+-- carries a ★; the cursor (j/k) is highlighted across the line.
+drawWordDefSense :: Bool -> Bool -> KrdictSense -> Widget Name
+drawWordDefSense isCursor isSaved sens =
+    applyIf isCursor (withAttr menuSelectedAttr) $
+    vBox
+        [ hBox
+            [ withAttr (if isSaved then correctAttr else hintAttr) $ txt (if isSaved then "★" else " ")
+            , txt $ T.pack (show (ksOrder sens)) <> ". " <> ksDefinition sens
+            ]
+        , padLeft (Pad 3) $ case englishTranslation sens of
+            Just  t -> withAttr hintAttr $ txt $ "English: " <> ktWord t <> "  (" <> ktDfn t <> ")"
+            Nothing -> withAttr hintAttr $ txt "English: (no translation provided)"
+            ]

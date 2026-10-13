@@ -17,7 +17,7 @@ import System.Environment (lookupEnv)
 import Output.TUI.Types
 import Output.TUI.Draw (drawUI)
 import Output.TUI.Events (handleEvent)
-import Output.Repository.Json (runJsonRepository, loadSettings, loadLearnedWords, loadStudentProfile)
+import Output.Repository.Json (runJsonRepository, loadSettings, loadLearnedWords, loadStudentProfile, loadWordDefinitions)
 import Output.Domain.Settings (AppSettings(..))
 import Output.Repository.Class
     ( getAllVocabCards
@@ -86,6 +86,7 @@ runTUI = do
     activities     <- runJsonRepository getAllActivities
     settings       <- loadSettings >>= applyEnvOverrides
     studentProfile <- loadStudentProfile
+    wordDefs       <- loadWordDefinitions
 
     let dueCards = Map.keys $ Map.filter isDue vocabStates
         isDue state = vstNextReviewDate state <= now
@@ -102,6 +103,7 @@ runTUI = do
             , asActivities     = activities
             , asSettings       = settings
             , asStudentProfile = studentProfile
+            , asWordDefs       = wordDefs
             }
 
     let buildVty = VCross.mkVty V.defaultConfig

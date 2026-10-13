@@ -39,6 +39,8 @@ module Output.Dict.Krdict
     , krdictToCard
     , englishTranslation
     , englishTranslations
+    , displayWordEntry
+    , orderedSenses
     , saveKrdictWord
     , isNoResultsError
     ) where
@@ -63,6 +65,7 @@ import Output.Domain.Types
     , VocabularyCard(..)
     , VocabularyId(..)
     , WordClass(..)
+    , WordDefinition(..)
     )
 import Output.Repository.Json (loadLearnedWords)
 
@@ -267,6 +270,34 @@ englishTranslation sense =
 englishTranslations :: KrdictWord -> [Text]
 englishTranslations w =
     mapMaybe (\s -> ktWord <$> englishTranslation s) (kwSenses w)
+
+-- | The word entry to display for a requested word: the saved one (matched
+-- by target_code) if present, otherwise the first entry whose headword
+-- matches, otherwise the first entry.
+displayWordEntry :: Text -> Maybe WordDefinition -> [KrdictWord] -> Maybe KrdictWord
+displayWordEntry word pref wds
+    | null wds = Nothing
+    | otherwise = firstJust candidates
+  where
+    candidates =
+        [ listToMaybe [w | w <- wds, Just d <- [pref], kwTargetCode w == wdTargetCode d]
+        , listToMaybe [w | w <- wds, kwWord w == word]
+        , listToMaybe wds
+        ]
+    firstJust []           = Nothing
+    firstJust (Just x : _) = Just x
+    firstJust (_ : xs)     = firstJust xs
+
+-- | Definitions in display order: the saved one (matched by sense_order)
+-- moved to the front, the rest in their original order.
+orderedSenses :: KrdictWord -> Maybe WordDefinition -> [KrdictSense]
+orderedSenses w pref
+    | Just d   <- pref
+    , wdTargetCode d == kwTargetCode w
+    , Just s <- listToMaybe [x | x <- kwSenses w, ksOrder x == wdSenseOrder d]
+    = s : [x | x <- kwSenses w, x /= s]
+    | otherwise
+    = kwSenses w
 
 -- | Map a KRDICT part-of-speech string (Korean) to a WordClass, best effort.
 -- KRDICT returns terms such as 명사, 동사, 형용사; we match on their key

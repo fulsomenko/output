@@ -16,17 +16,20 @@ import Output.Domain.Types
     ( TOPIK_Level(..)
     , VocabularyCard(..)
     , WordClass(..)
+    , WordDefinition(..)
     )
 import Output.Dict.Krdict
     ( KrdictError(..)
     , KrdictSense(..)
     , KrdictTranslation(..)
     , KrdictWord(..)
+    , displayWordEntry
     , englishTranslation
     , englishTranslations
     , krdictParse
     , krdictToCard
     , krdictWordClass
+    , orderedSenses
     , percentEncode
     , resolveApiKey
     , resolveApiKeyChecked
@@ -79,6 +82,56 @@ spec = do
         it "collects the English headword across every sense" $ do
             let Right ws = krdictParse sampleXml
             englishTranslations (head ws) `shouldBe` ["tree"]
+
+    -- Word entries built directly (no fixture needed).
+    let sampleEntry = \code -> KrdictWord
+            { kwTargetCode    = code
+            , kwWord          = "다른단어"
+            , kwPronunciation = ""
+            , kwWordGrade     = ""
+            , kwPos           = "명사"
+            , kwLink          = ""
+            , kwSenses        = [KrdictSense 1 "some definition" []]
+            }
+        twoSenseWord = KrdictWord
+            { kwTargetCode    = 9
+            , kwWord          = "샘"
+            , kwPronunciation = ""
+            , kwWordGrade     = "초급"
+            , kwPos           = "명사"
+            , kwLink          = ""
+            , kwSenses        =
+                [ KrdictSense 1 "a well" []
+                , KrdictSense 2 "to flow" []
+                ]
+            }
+        pref = WordDefinition 9 2
+
+    describe "displayWordEntry" $ do
+        it "returns Nothing when there are no entries" $
+            displayWordEntry "샘" Nothing [] `shouldBe` Nothing
+
+        it "falls back to the first entry when nothing is saved" $
+            displayWordEntry "샘" Nothing [twoSenseWord] `shouldBe` Just twoSenseWord
+
+        it "picks the saved entry by target_code, even if it is not first" $
+            displayWordEntry "샘" (Just pref) [sampleEntry 1, twoSenseWord]
+                `shouldBe` Just twoSenseWord
+
+        it "falls back to the headword match when the saved code matches no entry" $
+            displayWordEntry "샘" (Just (WordDefinition 42 1)) [sampleEntry 1, twoSenseWord]
+                `shouldBe` Just twoSenseWord
+
+    describe "orderedSenses" $ do
+        it "moves the saved definition to the front, preserving the rest" $
+            let [s1, s2] = orderedSenses twoSenseWord (Just pref)
+            in  [ksOrder s1, ksOrder s2] `shouldBe` [2, 1]
+
+        it "keeps the original order when the saved definition is absent" $
+            [ksOrder s | s <- orderedSenses twoSenseWord Nothing] `shouldBe` [1, 2]
+        it "keeps the original order when the saved entry is a different word" $
+            [ksOrder s | s <- orderedSenses twoSenseWord (Just (WordDefinition 99 2))]
+                `shouldBe` [1, 2]
 
     describe "krdictParse CDATA" $ do
         -- The real KRDICT API wraps trans_word / trans_dfn in <![CDATA[...]]>,

@@ -6,6 +6,7 @@ module Output.Domain.Types
     , VocabularyId(..)
     , WordClass(..)
     , VocabularyCard(..)
+    , WordDefinition(..)
     , ExerciseType(..)
     , MasteryLevel(..)
     , VocabularyState(..)
@@ -86,6 +87,17 @@ instance FromJSON VocabularyCard where
         <*> (o .:? "exampleTranslations" .!= [])
 
 instance ToJSON VocabularyCard
+
+-- | The one KRDICT definition a word entry was saved with.
+-- The (target_code, sense_order) pair is stable across KRDICT fetches,
+-- so this identifies the exact definition even when a word page changes.
+data WordDefinition = WordDefinition
+    { wdTargetCode :: Int   -- ^ KRDICT target_code of the word entry
+    , wdSenseOrder :: Int   -- ^ sense_order of the chosen definition
+    } deriving (Show, Eq, Generic)
+
+instance FromJSON WordDefinition
+instance ToJSON WordDefinition
 
 -- | Types of exercises users can complete
 data ExerciseType = Reading | Writing | Typing

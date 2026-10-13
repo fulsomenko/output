@@ -40,6 +40,14 @@ module Output.TUI.Types
     , moveCursor
     , isSavedWord
     , saveHighlighted
+      -- * Word Definition View
+    , WordDefStatus(..)
+    , WordDefState(..)
+    , initialWordDefState
+    , applyWordDefOutcome
+    , wordDefSenses
+    , moveDefCursor
+    , saveDefHighlighted
       -- * Application State
     , AppState(..)
     , AppEvent(..)
@@ -63,6 +71,7 @@ module Output.TUI.Types
 import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.Time (UTCTime, LocalTime)
 import Brick (AttrName, attrName)
 import GHC.Generics (Generic)
@@ -75,7 +84,12 @@ import Output.Domain.TypingLevel (TypingLevel)
 import Output.Domain.TypingWord (TypingWord)
 import Output.Domain.TypingExercise (TypingExerciseType, TypingPrompt, CharStatus)
 import Output.Domain.Settings (AppSettings, defaultSettings)
-import Output.Dict.Krdict (KrdictWord (..))
+import Output.Dict.Krdict
+    ( KrdictWord (..)
+    , KrdictSense (..)
+    , displayWordEntry
+    , orderedSenses
+    )
 import Output.LLM.Agent (AgentTask(..))
 import Output.LLM.Persona (Persona)
 import Output.LLM.Extractor (ExtractedWord)
@@ -93,6 +107,7 @@ data Name
     | ChatHistoryViewport
     | LookupViewport
     | VocabularyViewport
+    | VocabWordViewport
     deriving (Show, Eq, Ord)
 
 -- | Application screens
@@ -111,6 +126,7 @@ data Screen
     | PersonaScreen
     | LookupScreen
     | VocabularyScreen
+    | VocabWordScreen
     deriving (Show, Eq)
 
 -- | Mode of the drill exercise
@@ -396,6 +412,83 @@ saveHighlighted s
     rs = lookupResults s
     n  = length rs
 
+-- | Status of the vocabulary word definition view.
+data WordDefStatus
+    = WDLoading                 -- Request in flight
+    | WDResults [KrdictWord]    -- Fetched word entries
+    | WDFailed Text             -- Failure message
+    deriving (Show, Eq)
+
+-- | Live state of the vocabulary word definition view: the word being shown,
+-- its KRDICT entries, the highlighted definition ('wdsCursor') and the
+-- saved definition ('wdsSaved') for this word.
+data WordDefState = WordDefState
+    { wdsWord   :: Text              -- Korean word being shown
+    , wdsStatus :: WordDefStatus
+    , wdsCursor :: Int               -- 0-based index of the highlighted definition
+    , wdsNote   :: Maybe Text        -- Feedback note (e.g. save result)
+    , wdsSaved  :: Maybe WordDefinition -- Saved definition for this word
+    } deriving (Show, Eq)
+
+-- | Fresh word-definition state before the fetch result has arrived.
+initialWordDefState :: Text -> Maybe WordDefinition -> WordDefState
+initialWordDefState word saved = WordDefState
+    { wdsWord   = word
+    , wdsStatus = WDLoading
+    , wdsCursor = 0
+    , wdsNote   = Nothing
+    , wdsSaved  = saved
+    }
+
+-- | Apply a finished fetch of the word-definition.
+applyWordDefOutcome :: Either Text [KrdictWord] -> WordDefState -> WordDefState
+applyWordDefOutcome (Right wds) s =
+    s { wdsStatus = WDResults wds, wdsNote = Nothing, wdsCursor = 0 }
+applyWordDefOutcome (Left err)   s =
+    s { wdsStatus = WDFailed err,   wdsNote = Nothing }
+
+-- | The definitions shown for this word (saved one first, if present).
+wordDefSenses :: WordDefState -> [KrdictSense]
+wordDefSenses s = case wdsStatus s of
+    WDResults wds -> case displayWordEntry (wdsWord s) (wdsSaved s) wds of
+        Just e -> orderedSenses e (wdsSaved s)
+        Nothing -> []
+    _ -> []
+
+-- | Move the definition highlight by 'delta' (clamped). A no-op when there
+-- are no definitions.
+moveDefCursor :: Int -> WordDefState -> WordDefState
+moveDefCursor delta s
+    | null rs   = s
+    | otherwise = s { wdsCursor = clamp 0 (n - 1) (wdsCursor s + delta) }
+  where
+    rs    = wordDefSenses s
+    n     = length rs
+    clamp lo hi x = max lo (min hi x)
+
+-- | Record the highlighted definition as the saved one for this word and
+-- jump the highlight back to the top (where the saved one now sits).
+-- Returns the saved definition so the caller can persist it. A no-op when
+-- there are no definitions.
+saveDefHighlighted :: WordDefState -> (WordDefState, Maybe WordDefinition)
+saveDefHighlighted s
+    | null rs   = (s, Nothing)
+    | otherwise =
+        let entry = case wdsStatus s of
+                WDResults wds -> fromMaybe (error "unreachable: no entry") (displayWordEntry (wdsWord s) (wdsSaved s) wds)
+                _             -> error "unreachable: no results"
+            i     = max 0 (min (n - 1) (wdsCursor s))
+            pref  = WordDefinition (kwTargetCode entry) (ksOrder (rs !! i))
+        in ( s { wdsSaved  = Just pref
+               , wdsCursor = 0
+               , wdsNote   = Just "Saved."
+               }
+           , Just pref
+           )
+  where
+    rs = wordDefSenses s
+    n  = length rs
+
 -- | Custom events for the application
 data AppEvent
     = Tick
@@ -433,6 +526,8 @@ data AppState = AppState
     , asPersonaEdit   :: Maybe (PersonaEditField, Text) -- Active persona field edit
     , asStudentProfile :: Maybe StudentProfile          -- Cumulative student brief
     , asLookup :: Maybe LookupState                      -- Active dictionary lookup session
+    , asVocabWord :: Maybe WordDefState                  -- Active vocabulary word-definition view
+    , asWordDefs :: Map Text WordDefinition              -- Saved definitions per word
     } deriving (Show, Eq)
 
 -- | Initial application state
@@ -461,6 +556,8 @@ initialAppState = AppState
     , asPersonaEdit    = Nothing
     , asStudentProfile = Nothing
     , asLookup         = Nothing
+    , asVocabWord      = Nothing
+    , asWordDefs       = Map.empty
     }
 
 -- | Attribute names for styling

@@ -14,12 +14,15 @@ module Output.Repository.Json
     , loadStudentProfile
     , saveStudentProfile
     , appendSessionNote
+    , loadWordDefinitions
+    , saveWordDefinition
     ) where
 
 import Data.Aeson (decode, encode)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as BLC
-import Data.Map (fromList, toList)
+import Data.Map (Map, fromList, insert, toList)
+import Data.Text (Text)
 import Data.Time (localDay, getCurrentTime, utcToLocalTime, utc)
 import Data.Maybe (mapMaybe, listToMaybe)
 import System.Directory (doesFileExist, createDirectoryIfMissing)
@@ -30,6 +33,7 @@ import Output.Domain.Types
     ( VocabularyId(..)
     , VocabularyCard(..)
     , VocabularyState(..)
+    , WordDefinition(..)
     , TypingProgress(..)
     , emptyTypingProgress
     , TOPIK_Level(..)
@@ -288,3 +292,23 @@ saveLearnedWord level ew = do
             createDirectoryIfMissing True "data/user-data"
             BL.writeFile "data/user-data/learned-words.json" (encode (existing ++ [newCard]))
             pure (Just newCard)
+
+-- | Load the saved definition (target_code, sense_order) for each word.
+loadWordDefinitions :: IO (Map Text WordDefinition)
+loadWordDefinitions = do
+    let filePath = "data/user-data/word-definitions.json"
+    exists <- doesFileExist filePath
+    if not exists
+        then pure mempty
+        else do
+            content <- BL.readFile filePath
+            case decode content of
+                Just (defs :: [(Text, WordDefinition)]) -> pure (fromList defs)
+                Nothing -> pure mempty
+
+-- | Record the definition a user chose for a word (read-modify-write).
+saveWordDefinition :: Text -> WordDefinition -> IO ()
+saveWordDefinition word def = do
+    defs <- loadWordDefinitions
+    createDirectoryIfMissing True "data/user-data"
+    BL.writeFile "data/user-data/word-definitions.json" (encode (toList (insert word def defs)))
